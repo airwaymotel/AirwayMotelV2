@@ -1,0 +1,42 @@
+{
+  "name": "airway-motel",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.5.7",
+    "@supabase/supabase-js": "^2.111.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@zxing/library": "^0.23.0",
+    "aamva-parser": "^1.6.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "dotenv": "^17.4.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "lucide-react": "^1.27.0",
+    "qrcode.react": "^4.2.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-hook-form": "^7.83.0",
+    "react-router-dom": "^7.18.2",
+    "react-signature-canvas": "^1.1.0-alpha.2",
+    "react-webcam": "^7.2.0",
+    "sonner": "^2.0.7",
+    "tailwindcss": "^4.3.3",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
+  }
+}
