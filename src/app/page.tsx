@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Bell, Sun, Moon, Database, DatabaseOff } from 'lucide-react';
+import { Search, Bell, Sun, Moon, Database } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useMotelStore } from '@/lib/store';
 import Sidebar, { MobileNav } from '@/components/motel/sidebar';

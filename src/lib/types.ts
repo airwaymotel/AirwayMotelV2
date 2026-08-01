@@ -20,6 +20,9 @@ export interface Guest {
   email: string;
   idNumber: string;
   dateOfBirth: string;
+  idPhotoUrl?: string;
+  idType?: string;
+  idState?: string;
   createdAt: string;
 }
 
@@ -54,6 +57,14 @@ export interface ActivityLog {
   room: string;
   time: string;
   status: 'Success' | 'Pending';
+}
+
+export interface Signature {
+  id: string;
+  stayId: string;
+  guestId: string;
+  signatureDataUrl: string;
+  signedAt: string;
 }
 
 export type NavTab = 'dashboard' | 'rooms' | 'check-in' | 'checkout' | 'guests';

@@ -40,6 +40,9 @@ function mapGuestFromDb(row: Record<string, unknown>): Guest {
     email: (row.email as string) || '',
     idNumber: (row.id_number as string) || '',
     dateOfBirth: row.date_of_birth ? String(row.date_of_birth) : '',
+    idPhotoUrl: (row.id_photo_url as string) || '',
+    idType: (row.id_type as string) || '',
+    idState: (row.id_state as string) || '',
     createdAt: row.created_at as string,
   };
 }
@@ -278,6 +281,9 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
         email: guestData.email,
         id_number: guestData.idNumber,
         date_of_birth: guestData.dateOfBirth || null,
+        id_photo_url: guestData.idPhotoUrl || null,
+        id_type: guestData.idType || null,
+        id_state: guestData.idState || null,
       });
     }
 
