@@ -85,6 +85,7 @@ export default function CheckIn() {
   const realtimeChannelRef = useRef<any>(null);
 
   const [completedStayId, setCompletedStayId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   // ── Derived ──
   const availableRooms = useMemo(
@@ -180,8 +181,7 @@ export default function CheckIn() {
         return idNumber.length >= 4 && dateOfBirth.length > 0;
       case 4: return true;
       case 5:
-        if (idMethod === 'phone-scan') return termsAccepted && !!scannedSignatureUrl;
-        return termsAccepted && !!signatureDataUrl;
+        return termsAccepted;
       case 6: return false;
       default: return false;
     }
@@ -195,73 +195,91 @@ export default function CheckIn() {
     if (step > 0) setStep(step - 1);
   };
 
-  const handleSubmit = () => {
-    if (!selectedRoomId || !selectedRoom) return;
+  const handleSubmit = async () => {
+    if (submitting) return;
 
-    const guestId = addGuest({
-      firstName,
-      lastName,
-      phone,
-      email,
-      idNumber,
-      dateOfBirth,
-      idPhotoUrl: idPhotoUrl || undefined,
-      idType: idType || undefined,
-      idState: idState || undefined,
-    });
-
-    const stayId = addStay({
-      guestId,
-      roomId: selectedRoomId,
-      checkInDate,
-      checkInTime,
-      checkOutDate,
-      checkOutTime,
-      rateAmount: rate,
-      status: 'active',
-      keyDeposit: 10,
-      tvRemoteDeposit: 10,
-    });
-
-    addPayment({
-      stayId,
-      amount: rate,
-      method: paymentMethod,
-      description: `Room charge (1 night, ${roomType})`,
-    });
-
-    addPayment({
-      stayId,
-      amount: 20,
-      method: paymentMethod,
-      description: 'Key + TV remote deposit',
-    });
-
-    updateRoomStatus(selectedRoomId, 'occupied');
-
-    addActivity({
-      guest: `${firstName} ${lastName}`,
-      action: 'Check-in',
-      room: selectedRoom.roomNumber,
-      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-      status: 'Success',
-    });
-
-    // Save signature to Supabase if connected
-    const sigData = idMethod === 'phone-scan' ? scannedSignatureUrl : signatureDataUrl;
-    if (supabase && sigData) {
-      supabase.from('signatures').insert({
-        stay_id: stayId,
-        guest_id: guestId,
-        signature_data_url: sigData,
-      }).then(({ error }) => {
-        if (error) console.error('Failed to save signature:', error);
-      });
+    if (!selectedRoomId || !selectedRoom) {
+      toast.error('No room selected. Please go back and select a room.');
+      return;
     }
 
-    setCompletedStayId(stayId);
-    setStep(6);
-    toast.success('Check-in completed successfully!');
+    if (!termsAccepted) {
+      toast.error('Please accept the terms and conditions before completing check-in.');
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const guestId = addGuest({
+        firstName,
+        lastName,
+        phone,
+        email,
+        idNumber,
+        dateOfBirth,
+        idPhotoUrl: idPhotoUrl || undefined,
+        idType: idType || undefined,
+        idState: idState || undefined,
+      });
+
+      const stayId = addStay({
+        guestId,
+        roomId: selectedRoomId,
+        checkInDate,
+        checkInTime,
+        checkOutDate,
+        checkOutTime,
+        rateAmount: rate,
+        status: 'active',
+        keyDeposit: 10,
+        tvRemoteDeposit: 10,
+      });
+
+      addPayment({
+        stayId,
+        amount: rate,
+        method: paymentMethod,
+        description: `Room charge (1 night, ${roomType})`,
+      });
+
+      addPayment({
+        stayId,
+        amount: 20,
+        method: paymentMethod,
+        description: 'Key + TV remote deposit',
+      });
+
+      updateRoomStatus(selectedRoomId, 'occupied');
+
+      addActivity({
+        guest: `${firstName} ${lastName}`,
+        action: 'Check-in',
+        room: selectedRoom.roomNumber,
+        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        status: 'Success',
+      });
+
+      // Save signature to Supabase if connected
+      const sigData = idMethod === 'phone-scan' ? scannedSignatureUrl : signatureDataUrl;
+      if (supabase && sigData) {
+        const { error } = await supabase.from('signatures').insert({
+          stay_id: stayId,
+          guest_id: guestId,
+          signature_data_url: sigData,
+        });
+        if (error) console.error('Failed to save signature:', error);
+      }
+
+      setCompletedStayId(stayId);
+      setStep(6);
+      toast.success('Check-in completed successfully!');
+    } catch (err) {
+      console.error('Check-in error:', err);
+      toast.error('Check-in failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const resetForm = () => {
@@ -290,6 +308,7 @@ export default function CheckIn() {
     setScannedSignatureUrl('');
     setScanReceived(false);
     setCompletedStayId('');
+    setSubmitting(false);
   };
 
   return (
@@ -850,10 +869,19 @@ export default function CheckIn() {
             </Button>
             <Button
               onClick={step === 5 ? handleSubmit : handleNext}
-              disabled={!canNext()}
+              disabled={!canNext() || submitting}
             >
-              {step === 5 ? 'Complete Check-In' : 'Continue'}
-              <ArrowRight className="w-4 h-4 ml-1" />
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  {step === 5 ? 'Complete Check-In' : 'Continue'}
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </>
+              )}
             </Button>
           </div>
         )}

@@ -299,7 +299,7 @@ export default function MobileScanPage() {
             {camStatus === CAM_STATUS.UNAVAILABLE && !imageSrc && (
               <Overlay>
                 <CameraOff className="w-12 h-12 text-white/80 mb-4" />
-                <p className="font-bold text-lg mb&mb-1">No camera found</p>
+                <p className="font-bold text-lg mb-1">No camera found</p>
                 <button
                   onClick={startCamera}
                   className="px-5 py-2.5 bg-white text-black rounded-lg font-bold flex items-center gap-2 mt-4"
