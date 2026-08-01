@@ -31,7 +31,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         <h1 className="text-lg font-bold text-foreground leading-none">
           Airway
         </h1>
-        <h1 className="text-lg font-bold text-amber-600 leading-none mt-0.5">
+        <h1 className="text-lg font-bold text-amber-500 dark:text-amber-400 leading-none mt-0.5">
           Motel
         </h1>
         <p className="text-[10px] text-muted-foreground mt-2 uppercase tracking-wider">
@@ -53,14 +53,14 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               className={cn(
                 'group relative flex items-center gap-3 px-5 py-2.5 transition-colors text-sm cursor-pointer',
                 isActive
-                  ? 'text-amber-600 bg-amber-50 font-semibold'
+                  ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 font-semibold'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               )}
             >
               <span
                 className={cn(
                   'absolute left-0 top-0 bottom-0 w-[2px] transition-opacity',
-                  isActive ? 'bg-amber-500 opacity-100' : 'opacity-0'
+                  isActive ? 'bg-amber-500 dark:bg-amber-400 opacity-100' : 'opacity-0'
                 )}
               />
               <item.icon className="w-4 h-4" strokeWidth={1.5} />
@@ -91,7 +91,7 @@ export function MobileNav({ activeTab, onTabChange }: SidebarProps) {
             onClick={() => onTabChange(item.tab)}
             className={cn(
               'flex flex-col items-center justify-center gap-0.5 py-1 px-2 transition-colors cursor-pointer min-w-[48px] min-h-[44px]',
-              isActive ? 'text-amber-600' : 'text-muted-foreground'
+              isActive ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
             )}
           >
             <item.icon className="w-5 h-5" strokeWidth={1.5} />

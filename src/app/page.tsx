@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Bell, Sun, Moon } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { useMotelStore } from '@/lib/store';
 import Sidebar, { MobileNav } from '@/components/motel/sidebar';
 import Dashboard from '@/components/motel/dashboard';
@@ -17,20 +18,17 @@ import type { NavTab } from '@/lib/types';
 export default function Home() {
   const activeTab = useMotelStore((s) => s.activeTab);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
-  const [isLight, setIsLight] = useState(false);
+  const { theme, setTheme } = useTheme();
   const [now, setNow] = useState(new Date());
 
-  // Live clock
-  useState(() => {
-    const timer = setInterval(() => setNow(new Date()), 60000);
+  // Live clock — updates every second
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
-  });
+  }, []);
 
-  const toggleTheme = () => {
-    const next = !isLight;
-    setIsLight(next);
-    document.documentElement.classList.toggle('dark', !next);
-  };
+  const isDark = theme === 'dark';
+  const toggleTheme = () => setTheme(isDark ? 'light' : 'dark');
 
   const renderContent = () => {
     switch (activeTab) {
@@ -96,8 +94,8 @@ export default function Home() {
                 <p className="text-[11px] text-muted-foreground font-mono tabular-nums tracking-tight">
                   {now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </p>
-                <p className="text-[11px] text-amber-600 font-mono tabular-nums tracking-tight">
-                  {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                <p className="text-[11px] text-amber-500 dark:text-amber-400 font-mono tabular-nums tracking-tight">
+                  {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
                 </p>
               </div>
 
@@ -107,9 +105,9 @@ export default function Home() {
                 size="icon"
                 onClick={toggleTheme}
                 className="h-8 w-8 text-muted-foreground"
-                title={isLight ? 'Switch to night desk' : 'Switch to day desk'}
+                title={isDark ? 'Switch to day desk' : 'Switch to night desk'}
               >
-                {isLight ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </Button>
 
               {/* Notifications */}
@@ -124,7 +122,7 @@ export default function Home() {
 
               {/* Admin */}
               <div className="hidden lg:flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-bold">
+                <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center justify-center text-[10px] font-bold">
                   AD
                 </div>
                 <span className="text-xs text-muted-foreground">Admin</span>

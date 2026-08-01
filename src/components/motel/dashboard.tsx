@@ -31,6 +31,10 @@ export default function Dashboard() {
   const today = new Date().toISOString().split('T')[0];
   const checkoutsToday = activeStays.filter((s) => s.checkOutDate === today);
 
+  // Dynamic greeting based on time of day
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
   const upcomingCheckouts = checkoutsToday.map((s) => ({
     id: s.id,
     name: `${s.guest.firstName} ${s.guest.lastName}`,
@@ -43,7 +47,7 @@ export default function Dashboard() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-foreground">Operations Overview</h2>
         <p className="text-muted-foreground mt-1">
-          Good morning, Admin. Here is what is happening at Airway Motel today.
+          {greeting}, Admin. Here is what is happening at Airway Motel today.
         </p>
       </div>
 

@@ -14,9 +14,9 @@ interface StatCardProps {
 
 const toneClasses = {
   default: 'text-foreground',
-  success: 'text-green-600',
-  warning: 'text-amber-600',
-  destructive: 'text-red-600',
+  success: 'text-green-600 dark:text-green-400',
+  warning: 'text-amber-600 dark:text-amber-400',
+  destructive: 'text-red-600 dark:text-red-400',
 };
 
 export default function StatCard({

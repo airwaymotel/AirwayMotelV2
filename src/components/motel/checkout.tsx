@@ -252,7 +252,7 @@ export default function Checkout() {
                 <Button
                   onClick={handleCheckout}
                   disabled={isProcessing || !selectedStay}
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-black py-3 text-sm font-bold shadow-lg"
+                  className="w-full bg-amber-500 dark:bg-amber-600 hover:bg-amber-600 dark:hover:bg-amber-500 text-white py-3 text-sm font-bold shadow-lg"
                 >
                   <KeyRound className="w-4 h-4 mr-2" />
                   {isProcessing ? 'Processing...' : 'Process Checkout'}

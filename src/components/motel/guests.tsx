@@ -102,7 +102,7 @@ export default function Guests() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center">
               <Users className="w-5 h-5" />
             </div>
             <div>
