@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import type { Room, Guest, Stay, Payment, ActivityLog, NavTab } from './types';
+import { isSupabaseConnected } from './supabase';
+
+// ── Helpers ──────────────────────────────────────────────────────
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
@@ -13,67 +16,84 @@ function timeNow(): string {
   return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
-// ── Mock Data ──────────────────────────────────────────────────────
+// ── Supabase Field Mapping ───────────────────────────────────────
+// Our app uses camelCase. Supabase uses snake_case.
+// These mappers translate between the two.
+
+function mapRoomFromDb(row: Record<string, unknown>): Room {
+  return {
+    id: row.id as string,
+    roomNumber: row.room_number as string,
+    floor: row.floor as number,
+    type: row.type as Room['type'],
+    rate: row.type === '2-bed' ? 85 : 65,
+    status: row.status as Room['status'],
+  };
+}
+
+function mapGuestFromDb(row: Record<string, unknown>): Guest {
+  return {
+    id: row.id as string,
+    firstName: (row.first_name as string) || '',
+    lastName: (row.last_name as string) || '',
+    phone: (row.phone as string) || '',
+    email: (row.email as string) || '',
+    idNumber: (row.id_number as string) || '',
+    dateOfBirth: row.date_of_birth ? String(row.date_of_birth) : '',
+    createdAt: row.created_at as string,
+  };
+}
+
+function mapStayFromDb(row: Record<string, unknown>): Stay {
+  return {
+    id: row.id as string,
+    guestId: row.guest_id as string,
+    roomId: row.room_id as string,
+    checkInDate: row.check_in_date ? String(row.check_in_date) : '',
+    checkInTime: row.check_in_time ? String(row.check_in_time) : '',
+    checkOutDate: row.check_out_date ? String(row.check_out_date) : '',
+    checkOutTime: row.check_out_time ? String(row.check_out_time) : '',
+    rateAmount: Number(row.rate_amount) || 0,
+    status: row.status as Stay['status'],
+    keyDeposit: Number(row.key_deposit) || 10,
+    tvRemoteDeposit: Number(row.tv_remote_deposit) || 10,
+    createdAt: row.created_at as string,
+  };
+}
+
+function mapPaymentFromDb(row: Record<string, unknown>): Payment {
+  return {
+    id: row.id as string,
+    stayId: row.stay_id as string,
+    amount: Number(row.amount) || 0,
+    method: (row.method as Payment['method']) || 'cash',
+    description: (row.notes as string) || '',
+    paidAt: row.paid_at as string,
+  };
+}
+
+// ── Mock Data ────────────────────────────────────────────────────
 
 const MOCK_ROOMS: Room[] = [
-  // Floor 1
   { id: 'room-101', roomNumber: '101', floor: 1, type: '1-bed', rate: 65, status: 'occupied' },
   { id: 'room-102', roomNumber: '102', floor: 1, type: '1-bed', rate: 65, status: 'available' },
   { id: 'room-103', roomNumber: '103', floor: 1, type: '2-bed', rate: 85, status: 'occupied' },
   { id: 'room-104', roomNumber: '104', floor: 1, type: '1-bed', rate: 65, status: 'cleaning' },
   { id: 'room-105', roomNumber: '105', floor: 1, type: '2-bed', rate: 85, status: 'available' },
-  // Floor 2
   { id: 'room-201', roomNumber: '201', floor: 2, type: '1-bed', rate: 65, status: 'occupied' },
   { id: 'room-202', roomNumber: '202', floor: 2, type: '2-bed', rate: 85, status: 'maintenance' },
   { id: 'room-203', roomNumber: '203', floor: 2, type: '1-bed', rate: 65, status: 'available' },
   { id: 'room-204', roomNumber: '204', floor: 2, type: '2-bed', rate: 85, status: 'reserved' },
   { id: 'room-205', roomNumber: '205', floor: 2, type: '1-bed', rate: 65, status: 'available' },
-  // Floor 3
   { id: 'room-301', roomNumber: '301', floor: 3, type: '2-bed', rate: 85, status: 'occupied' },
   { id: 'room-302', roomNumber: '302', floor: 3, type: '1-bed', rate: 65, status: 'available' },
 ];
 
 const MOCK_GUESTS: Guest[] = [
-  {
-    id: 'guest-1',
-    firstName: 'Marcus',
-    lastName: 'Johnson',
-    phone: '(720) 555-0142',
-    email: 'marcus.j@email.com',
-    idNumber: 'DL-882931',
-    dateOfBirth: '1985-03-12',
-    createdAt: '2025-01-15T10:00:00Z',
-  },
-  {
-    id: 'guest-2',
-    firstName: 'Elena',
-    lastName: 'Rodriguez',
-    phone: '(303) 555-0278',
-    email: 'elena.r@email.com',
-    idNumber: 'DL-441277',
-    dateOfBirth: '1990-07-22',
-    createdAt: '2025-02-20T14:30:00Z',
-  },
-  {
-    id: 'guest-3',
-    firstName: 'David',
-    lastName: 'Chen',
-    phone: '(720) 555-0391',
-    email: 'david.c@email.com',
-    idNumber: 'PASS-9821',
-    dateOfBirth: '1978-11-05',
-    createdAt: '2025-03-10T09:15:00Z',
-  },
-  {
-    id: 'guest-4',
-    firstName: 'Sarah',
-    lastName: 'Williams',
-    phone: '(303) 555-0510',
-    email: 'sarah.w@email.com',
-    idNumber: 'DL-556093',
-    dateOfBirth: '1992-06-18',
-    createdAt: '2025-04-05T16:45:00Z',
-  },
+  { id: 'guest-1', firstName: 'Marcus', lastName: 'Johnson', phone: '(720) 555-0142', email: 'marcus.j@email.com', idNumber: 'DL-882931', dateOfBirth: '1985-03-12', createdAt: '2025-01-15T10:00:00Z' },
+  { id: 'guest-2', firstName: 'Elena', lastName: 'Rodriguez', phone: '(303) 555-0278', email: 'elena.r@email.com', idNumber: 'DL-441277', dateOfBirth: '1990-07-22', createdAt: '2025-02-20T14:30:00Z' },
+  { id: 'guest-3', firstName: 'David', lastName: 'Chen', phone: '(720) 555-0391', email: 'david.c@email.com', idNumber: 'PASS-9821', dateOfBirth: '1978-11-05', createdAt: '2025-03-10T09:15:00Z' },
+  { id: 'guest-4', firstName: 'Sarah', lastName: 'Williams', phone: '(303) 555-0510', email: 'sarah.w@email.com', idNumber: 'DL-556093', dateOfBirth: '1992-06-18', createdAt: '2025-04-05T16:45:00Z' },
 ];
 
 const today = todayStr();
@@ -81,62 +101,10 @@ const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString().split('T')[0];
 
 const MOCK_STAYS: Stay[] = [
-  {
-    id: 'stay-1',
-    guestId: 'guest-1',
-    roomId: 'room-101',
-    checkInDate: twoDaysAgo,
-    checkInTime: '2:00 PM',
-    checkOutDate: today,
-    checkOutTime: '10:00 AM',
-    rateAmount: 65,
-    status: 'active',
-    keyDeposit: 10,
-    tvRemoteDeposit: 10,
-    createdAt: twoDaysAgo + 'T14:00:00Z',
-  },
-  {
-    id: 'stay-2',
-    guestId: 'guest-2',
-    roomId: 'room-103',
-    checkInDate: twoDaysAgo,
-    checkInTime: '3:30 PM',
-    checkOutDate: today,
-    checkOutTime: '10:00 AM',
-    rateAmount: 85,
-    status: 'active',
-    keyDeposit: 10,
-    tvRemoteDeposit: 10,
-    createdAt: twoDaysAgo + 'T15:30:00Z',
-  },
-  {
-    id: 'stay-3',
-    guestId: 'guest-3',
-    roomId: 'room-201',
-    checkInDate: today,
-    checkInTime: '11:00 AM',
-    checkOutDate: tomorrow,
-    checkOutTime: '10:00 AM',
-    rateAmount: 65,
-    status: 'active',
-    keyDeposit: 10,
-    tvRemoteDeposit: 10,
-    createdAt: today + 'T11:00:00Z',
-  },
-  {
-    id: 'stay-4',
-    guestId: 'guest-4',
-    roomId: 'room-301',
-    checkInDate: today,
-    checkInTime: '1:00 PM',
-    checkOutDate: tomorrow,
-    checkOutTime: '10:00 AM',
-    rateAmount: 85,
-    status: 'active',
-    keyDeposit: 10,
-    tvRemoteDeposit: 10,
-    createdAt: today + 'T13:00:00Z',
-  },
+  { id: 'stay-1', guestId: 'guest-1', roomId: 'room-101', checkInDate: twoDaysAgo, checkInTime: '2:00 PM', checkOutDate: today, checkOutTime: '10:00 AM', rateAmount: 65, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: twoDaysAgo + 'T14:00:00Z' },
+  { id: 'stay-2', guestId: 'guest-2', roomId: 'room-103', checkInDate: twoDaysAgo, checkInTime: '3:30 PM', checkOutDate: today, checkOutTime: '10:00 AM', rateAmount: 85, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: twoDaysAgo + 'T15:30:00Z' },
+  { id: 'stay-3', guestId: 'guest-3', roomId: 'room-201', checkInDate: today, checkInTime: '11:00 AM', checkOutDate: tomorrow, checkOutTime: '10:00 AM', rateAmount: 65, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: today + 'T11:00:00Z' },
+  { id: 'stay-4', guestId: 'guest-4', roomId: 'room-301', checkInDate: today, checkInTime: '1:00 PM', checkOutDate: tomorrow, checkOutTime: '10:00 AM', rateAmount: 85, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: today + 'T13:00:00Z' },
 ];
 
 const MOCK_PAYMENTS: Payment[] = [
@@ -158,7 +126,47 @@ const MOCK_ACTIVITY: ActivityLog[] = [
   { id: 'log-5', guest: 'Mike Turner', action: 'Check-out', room: '104', time: '9:45 AM', status: 'Success' },
 ];
 
-// ── Store Interface ────────────────────────────────────────────────
+// ── API Fetch Helpers ────────────────────────────────────────────
+
+async function fetchFromApi<T>(path: string): Promise<T[] | null> {
+  try {
+    const res = await fetch(path);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function postToApi<T>(path: string, body: Record<string, unknown>): Promise<T | null> {
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function patchApi<T>(path: string, body: Record<string, unknown>): Promise<T | null> {
+  try {
+    const res = await fetch(path, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+// ── Store Interface ──────────────────────────────────────────────
 
 interface MotelStore {
   // Data
@@ -168,9 +176,14 @@ interface MotelStore {
   payments: Payment[];
   activityLog: ActivityLog[];
   activeTab: NavTab;
+  isLoading: boolean;
+  isUsingSupabase: boolean;
 
   // Navigation
   setActiveTab: (tab: NavTab) => void;
+
+  // Data loading
+  loadFromSupabase: () => Promise<void>;
 
   // Room operations
   updateRoomStatus: (roomId: string, status: Room['status']) => void;
@@ -198,7 +211,7 @@ interface MotelStore {
   getCheckoutsToday: () => Stay[];
 }
 
-// ── Store ──────────────────────────────────────────────────────────
+// ── Store ────────────────────────────────────────────────────────
 
 export const useMotelStore = create<MotelStore>((set, get) => ({
   rooms: MOCK_ROOMS,
@@ -207,33 +220,96 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
   payments: MOCK_PAYMENTS,
   activityLog: MOCK_ACTIVITY,
   activeTab: 'dashboard',
+  isLoading: false,
+  isUsingSupabase: false,
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 
-  updateRoomStatus: (roomId, status) =>
+  // ── Load all data from Supabase via API routes ──
+  loadFromSupabase: async () => {
+    if (!isSupabaseConnected) return;
+
+    set({ isLoading: true });
+
+    const [roomsData, guestsData, staysData, paymentsData] = await Promise.all([
+      fetchFromApi<Record<string, unknown>>('/api/rooms'),
+      fetchFromApi<Record<string, unknown>>('/api/guests'),
+      fetchFromApi<Record<string, unknown>>('/api/stays'),
+      fetchFromApi<Record<string, unknown>>('/api/payments'),
+    ]);
+
+    set({
+      rooms: roomsData ? roomsData.map(mapRoomFromDb) : MOCK_ROOMS,
+      guests: guestsData ? guestsData.map(mapGuestFromDb) : MOCK_GUESTS,
+      stays: staysData ? (staysData as Record<string, unknown>[]).map(mapStayFromDb) : MOCK_STAYS,
+      payments: paymentsData ? paymentsData.map(mapPaymentFromDb) : MOCK_PAYMENTS,
+      isUsingSupabase: !!(roomsData || guestsData || staysData || paymentsData),
+      isLoading: false,
+    });
+  },
+
+  // ── Room operations ──
+  updateRoomStatus: (roomId, status) => {
     set((state) => ({
       rooms: state.rooms.map((r) => (r.id === roomId ? { ...r, status } : r)),
-    })),
+    }));
 
+    // Sync to Supabase
+    if (isSupabaseConnected) {
+      patchApi('/api/rooms', { id: roomId, status });
+    }
+  },
+
+  // ── Guest operations ──
   addGuest: (guestData) => {
     const id = generateId();
+    const now = new Date().toISOString();
+
     set((state) => ({
-      guests: [
-        ...state.guests,
-        { ...guestData, id, createdAt: new Date().toISOString() },
-      ],
+      guests: [...state.guests, { ...guestData, id, createdAt: now }],
     }));
+
+    // Sync to Supabase
+    if (isSupabaseConnected) {
+      postToApi('/api/guests', {
+        first_name: guestData.firstName,
+        last_name: guestData.lastName,
+        phone: guestData.phone,
+        email: guestData.email,
+        id_number: guestData.idNumber,
+        date_of_birth: guestData.dateOfBirth || null,
+      });
+    }
+
     return id;
   },
 
+  // ── Stay operations ──
   addStay: (stayData) => {
     const id = generateId();
+    const now = new Date().toISOString();
+
     set((state) => ({
-      stays: [
-        ...state.stays,
-        { ...stayData, id, createdAt: new Date().toISOString() },
-      ],
+      stays: [...state.stays, { ...stayData, id, createdAt: now }],
     }));
+
+    // Sync to Supabase
+    if (isSupabaseConnected) {
+      postToApi('/api/stays', {
+        guest_id: stayData.guestId,
+        room_id: stayData.roomId,
+        rate_type: 'daily',
+        rate_amount: stayData.rateAmount,
+        check_in_date: stayData.checkInDate,
+        check_in_time: stayData.checkInTime,
+        check_out_date: stayData.checkOutDate,
+        check_out_time: stayData.checkOutTime,
+        status: 'active',
+        key_deposit: stayData.keyDeposit,
+        tv_remote_deposit: stayData.tvRemoteDeposit,
+      });
+    }
+
     return id;
   },
 
@@ -246,23 +322,41 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
       stays: state.stays.map((s) => (s.id === stayId ? { ...s, status: 'checked_out' as const } : s)),
       rooms: state.rooms.map((r) => (r.id === stay.roomId ? { ...r, status: 'cleaning' as const } : r)),
     }));
+
+    // Sync to Supabase
+    if (isSupabaseConnected) {
+      patchApi('/api/stays', { id: stayId, status: 'checked_out', actual_check_out: new Date().toISOString() });
+      patchApi('/api/rooms', { id: stay.roomId, status: 'cleaning' });
+    }
   },
 
+  // ── Payment operations ──
   addPayment: (paymentData) => {
+    const now = new Date().toISOString();
+
     set((state) => ({
-      payments: [
-        ...state.payments,
-        { ...paymentData, id: generateId(), paidAt: new Date().toISOString() },
-      ],
+      payments: [...state.payments, { ...paymentData, id: generateId(), paidAt: now }],
     }));
+
+    // Sync to Supabase
+    if (isSupabaseConnected) {
+      postToApi('/api/payments', {
+        stay_id: paymentData.stayId,
+        amount: paymentData.amount,
+        method: paymentData.method,
+        notes: paymentData.description,
+      });
+    }
   },
 
+  // ── Activity log (local only — not in Supabase) ──
   addActivity: (entry) => {
     set((state) => ({
       activityLog: [{ ...entry, id: generateId() }, ...state.activityLog].slice(0, 50),
     }));
   },
 
+  // ── Computed helpers ──
   getAvailableRooms: (type) => {
     const { rooms } = get();
     return rooms.filter((r) => {
