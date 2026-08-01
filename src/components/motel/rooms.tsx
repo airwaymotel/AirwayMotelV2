@@ -5,19 +5,31 @@ import { useRouter } from 'next/navigation';
 import {
   Search, RotateCcw, User, Phone, Mail, Calendar,
   CreditCard, Shield, FileText, ArrowRight, BedSingle, BedDouble,
-  ImageIcon, PenLine,
+  ImageIcon, PenLine, Plus, Trash2, Pencil, Check, X, Loader2,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useMotelStore } from '@/lib/store';
+import { toast } from 'sonner';
 import RoomCard from './room-card';
-import type { Room } from '@/lib/types';
+import type { Room, RoomType, RoomStatus } from '@/lib/types';
 
 const FILTERS = ['All', 'Available', 'Occupied', 'Needs Attention'] as const;
+
+const STATUS_OPTIONS: { value: RoomStatus; label: string; color: string }[] = [
+  { value: 'available', label: 'Available', color: 'bg-green-500' },
+  { value: 'occupied', label: 'Occupied', color: 'bg-red-500' },
+  { value: 'maintenance', label: 'Maintenance', color: 'bg-amber-500' },
+  { value: 'cleaning', label: 'Cleaning', color: 'bg-blue-500' },
+  { value: 'reserved', label: 'Reserved', color: 'bg-purple-500' },
+];
 
 export default function Rooms() {
   const router = useRouter();
@@ -25,11 +37,32 @@ export default function Rooms() {
   const stays = useMotelStore((s) => s.stays);
   const guests = useMotelStore((s) => s.guests);
   const payments = useMotelStore((s) => s.payments);
+  const addRoom = useMotelStore((s) => s.addRoom);
   const updateRoomStatus = useMotelStore((s) => s.updateRoomStatus);
+  const updateRoom = useMotelStore((s) => s.updateRoom);
+  const deleteRoom = useMotelStore((s) => s.deleteRoom);
 
   const [filter, setFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+
+  // Add Room dialog state
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [newRoomNumber, setNewRoomNumber] = useState('');
+  const [newRoomType, setNewRoomType] = useState<RoomType>('1-bed');
+  const [newRoomFloor, setNewRoomFloor] = useState('1');
+  const [newRoomStatus, setNewRoomStatus] = useState<RoomStatus>('available');
+  const [adding, setAdding] = useState(false);
+
+  // Edit mode in sheet
+  const [editing, setEditing] = useState(false);
+  const [editRoomNumber, setEditRoomNumber] = useState('');
+  const [editRoomType, setEditRoomType] = useState<RoomType>('1-bed');
+  const [editRoomFloor, setEditRoomFloor] = useState('1');
+
+  // Delete confirmation
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const filteredRooms = rooms.filter((room) => {
     if (filter !== 'All') {
@@ -58,8 +91,92 @@ export default function Rooms() {
     reserved: 'bg-purple-500',
   };
 
-  // Currently selected room's active stay (with guest + payments)
   const activeStay = selectedRoom ? getActiveStayForRoom(selectedRoom.id) : undefined;
+
+  // ── Add Room Handler ──
+  const handleAddRoom = async () => {
+    if (!newRoomNumber.trim()) {
+      toast.error('Room number is required');
+      return;
+    }
+    if (rooms.some((r) => r.roomNumber === newRoomNumber.trim())) {
+      toast.error(`Room ${newRoomNumber} already exists`);
+      return;
+    }
+    setAdding(true);
+    try {
+      const rate = newRoomType === '1-bed' ? 65 : 85;
+      await addRoom({
+        roomNumber: newRoomNumber.trim(),
+        type: newRoomType,
+        floor: parseInt(newRoomFloor) || 1,
+        rate,
+        status: newRoomStatus,
+      });
+      toast.success(`Room ${newRoomNumber} added successfully`);
+      setShowAddDialog(false);
+      setNewRoomNumber('');
+      setNewRoomType('1-bed');
+      setNewRoomFloor('1');
+      setNewRoomStatus('available');
+    } catch (err) {
+      toast.error('Failed to add room');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  // ── Delete Room Handler ──
+  const handleDeleteRoom = async () => {
+    if (!selectedRoom) return;
+    if (selectedRoom.status === 'occupied') {
+      toast.error('Cannot delete an occupied room. Check out the guest first.');
+      setShowDeleteConfirm(false);
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteRoom(selectedRoom.id);
+      toast.success(`Room ${selectedRoom.roomNumber} deleted`);
+      setSelectedRoom(null);
+      setShowDeleteConfirm(false);
+    } catch (err) {
+      toast.error('Failed to delete room');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // ── Edit Room Handler ──
+  const handleSaveEdit = () => {
+    if (!selectedRoom) return;
+    if (!editRoomNumber.trim()) {
+      toast.error('Room number is required');
+      return;
+    }
+    const updates: Partial<Omit<Room, 'id'>> = {};
+    if (editRoomNumber !== selectedRoom.roomNumber) updates.roomNumber = editRoomNumber.trim();
+    if (editRoomType !== selectedRoom.type) {
+      updates.type = editRoomType;
+      updates.rate = editRoomType === '1-bed' ? 65 : 85;
+    }
+    if (parseInt(editRoomFloor) !== selectedRoom.floor) updates.floor = parseInt(editRoomFloor) || 1;
+
+    if (Object.keys(updates).length > 0) {
+      updateRoom(selectedRoom.id, updates);
+      setSelectedRoom({ ...selectedRoom, ...updates });
+      toast.success('Room updated');
+    }
+    setEditing(false);
+  };
+
+  const startEditing = () => {
+    if (!selectedRoom) return;
+    setEditRoomNumber(selectedRoom.roomNumber);
+    setEditRoomType(selectedRoom.type);
+    setEditRoomFloor(String(selectedRoom.floor));
+    setEditing(true);
+  };
 
   return (
     <div className="p-4 lg:p-6">
@@ -96,8 +213,14 @@ export default function Rooms() {
             ))}
           </div>
 
-          <Button variant="outline" size="icon" className="h-9 w-9">
+          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => useMotelStore.getState().loadFromSupabase()}>
             <RotateCcw className="w-4 h-4" />
+          </Button>
+
+          {/* Add Room Button */}
+          <Button size="sm" onClick={() => setShowAddDialog(true)} className="h-9">
+            <Plus className="w-4 h-4 mr-1.5" />
+            Add Room
           </Button>
         </div>
       </div>
@@ -111,10 +234,10 @@ export default function Rooms() {
         <div className="space-y-6">
           {/* Legend */}
           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-            {(['available', 'occupied', 'maintenance', 'cleaning', 'reserved'] as const).map((status) => (
-              <div key={status} className="flex items-center gap-1.5">
-                <span className={`w-2.5 h-2.5 rounded-full ${statusColors[status]}`} />
-                <span className="capitalize">{status}</span>
+            {STATUS_OPTIONS.map((s) => (
+              <div key={s.value} className="flex items-center gap-1.5">
+                <span className={`w-2.5 h-2.5 rounded-full ${s.color}`} />
+                <span>{s.label}</span>
               </div>
             ))}
           </div>
@@ -125,251 +248,427 @@ export default function Rooms() {
                 key={room.id}
                 room={room}
                 activeStay={getActiveStayForRoom(room.id)}
-                onClick={() => setSelectedRoom(room)}
+                onClick={() => { setSelectedRoom(room); setEditing(false); }}
               />
             ))}
           </div>
         </div>
       )}
 
+      {/* ── Add Room Dialog ── */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Room</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="room-number" className="text-xs">Room Number *</Label>
+                <Input
+                  id="room-number"
+                  placeholder="e.g. 15"
+                  value={newRoomNumber}
+                  onChange={(e) => setNewRoomNumber(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="room-floor" className="text-xs">Floor</Label>
+                <Input
+                  id="room-floor"
+                  type="number"
+                  min="1"
+                  value={newRoomFloor}
+                  onChange={(e) => setNewRoomFloor(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs">Room Type</Label>
+                <Select value={newRoomType} onValueChange={(v) => setNewRoomType(v as RoomType)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1-bed">1-Bed King ($65)</SelectItem>
+                    <SelectItem value="2-bed">2-Bed Queen ($85)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Initial Status</Label>
+                <Select value={newRoomStatus} onValueChange={(v) => setNewRoomStatus(v as RoomStatus)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        <span className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${s.color}`} />
+                          {s.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)} disabled={adding}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddRoom} disabled={adding || !newRoomNumber.trim()}>
+              {adding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+              {adding ? 'Adding...' : 'Add Room'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Confirmation Dialog ── */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Room {selectedRoom?.roomNumber}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            This will permanently remove this room from the system. This action cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteRoom} disabled={deleting}>
+              {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              {deleting ? 'Deleting...' : 'Delete Room'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Room Detail Sheet ── */}
-      <Sheet open={!!selectedRoom} onOpenChange={(open) => !open && setSelectedRoom(null)}>
+      <Sheet open={!!selectedRoom} onOpenChange={(open) => { if (!open) { setSelectedRoom(null); setEditing(false); } }}>
         <SheetContent className="overflow-y-auto">
           {selectedRoom && (
             <>
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-3">
                   <span className={`w-3 h-3 rounded-full ${statusColors[selectedRoom.status]}`} />
-                  Room {selectedRoom.roomNumber}
+                  {editing ? `Edit Room ${selectedRoom.roomNumber}` : `Room ${selectedRoom.roomNumber}`}
                 </SheetTitle>
               </SheetHeader>
 
-              {/* ── OCCUPIED ROOM: Rich guest detail ── */}
-              {selectedRoom.status === 'occupied' && activeStay ? (
-                <div className="mt-8 space-y-6">
-                  {/* Room basics */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Type</p>
-                      <p className="text-sm font-medium flex items-center gap-1.5">
-                        {selectedRoom.type === '1-bed' ? <BedSingle className="w-4 h-4" /> : <BedDouble className="w-4 h-4" />}
-                        {selectedRoom.type === '1-bed' ? '1-Bed King' : '2-Bed Queen'}
-                      </p>
+              {/* ── EDIT MODE ── */}
+              {editing ? (
+                <div className="mt-8 space-y-5">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Room Number</Label>
+                      <Input value={editRoomNumber} onChange={(e) => setEditRoomNumber(e.target.value)} />
                     </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Rate</p>
-                      <p className="text-sm font-medium">${selectedRoom.rate}/night</p>
-                    </div>
-                  </div>
-
-                  <Separator className="my-2" />
-
-                  {/* Guest Profile */}
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5" /> Current Guest
-                    </p>
-                    <div className="flex items-center gap-4">
-                      <Avatar className="h-12 w-12 shrink-0">
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
-                          {(activeStay.guest.firstName || '?')[0]}{(activeStay.guest.lastName || '?')[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="space-y-1.5">
-                        <p className="text-sm font-semibold">
-                          {activeStay.guest.firstName} {activeStay.guest.lastName}
-                        </p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                          <Phone className="w-3 h-3 shrink-0" /> {activeStay.guest.phone}
-                        </p>
-                        {activeStay.guest.email && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                            <Mail className="w-3 h-3 shrink-0" /> {activeStay.guest.email}
-                          </p>
-                        )}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Type</Label>
+                        <Select value={editRoomType} onValueChange={(v) => setEditRoomType(v as RoomType)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1-bed">1-Bed King ($65)</SelectItem>
+                            <SelectItem value="2-bed">2-Bed Queen ($85)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Floor</Label>
+                        <Input type="number" min="1" value={editRoomFloor} onChange={(e) => setEditRoomFloor(e.target.value)} />
                       </div>
                     </div>
                   </div>
 
-                  {/* Check-in / Check-out */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-muted/40 rounded-lg p-4">
-                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-2 flex items-center gap-1">
-                        <Calendar className="w-3 h-3" /> Check-in
-                      </p>
-                      <p className="text-sm font-medium">{activeStay.checkInDate}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{activeStay.checkInTime}</p>
-                    </div>
-                    <div className="bg-muted/40 rounded-lg p-4">
-                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-2 flex items-center gap-1">
-                        <Calendar className="w-3 h-3" /> Check-out
-                      </p>
-                      <p className="text-sm font-medium">{activeStay.checkOutDate}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{activeStay.checkOutTime}</p>
-                    </div>
-                  </div>
-
-                  {/* Identification Details */}
-                  {(activeStay.guest.idNumber || activeStay.guest.dateOfBirth || activeStay.guest.idType) && (
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
-                        <Shield className="w-3.5 h-3.5" /> Identification
-                      </p>
-                      <div className="bg-muted/40 rounded-lg p-4 space-y-3">
-                        {activeStay.guest.idType && (
-                          <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">ID Type</span>
-                            <span className="font-medium">{activeStay.guest.idType}</span>
-                          </div>
-                        )}
-                        {activeStay.guest.idNumber && (
-                          <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">ID Number</span>
-                            <span className="font-medium font-mono">{activeStay.guest.idNumber}</span>
-                          </div>
-                        )}
-                        {activeStay.guest.idState && (
-                          <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">State</span>
-                            <span className="font-medium">{activeStay.guest.idState}</span>
-                          </div>
-                        )}
-                        {activeStay.guest.dateOfBirth && (
-                          <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">Date of Birth</span>
-                            <span className="font-medium">{activeStay.guest.dateOfBirth}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ID Photo */}
-                  {activeStay.guest.idPhotoUrl && (
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
-                        <ImageIcon className="w-3.5 h-3.5" /> ID Photo on File
-                      </p>
-                      <div className="rounded-lg overflow-hidden border border-border bg-muted/20 p-2">
-                        <img
-                          src={activeStay.guest.idPhotoUrl}
-                          alt="ID Photo"
-                          className="w-full max-h-44 object-contain"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Payments Summary */}
-                  {activeStay.payments && activeStay.payments.length > 0 && (
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
-                        <CreditCard className="w-3.5 h-3.5" /> Payments
-                      </p>
-                      <div className="bg-muted/40 rounded-lg p-4 space-y-3">
-                        {activeStay.payments.map((p) => (
-                          <div key={p.id} className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">{p.description}</span>
-                            <span className="font-medium">${p.amount}</span>
-                          </div>
-                        ))}
-                        <Separator className="my-1" />
-                        <div className="flex justify-between text-xs font-semibold">
-                          <span>Total</span>
-                          <span>${activeStay.payments.reduce((sum, p) => sum + p.amount, 0)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <Separator className="my-2" />
-
-                  {/* View Details Button */}
-                  <Button
-                    className="w-full h-11 text-sm"
-                    onClick={() => router.push(`/stay/${activeStay.id}`)}
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    View Full Details
-                    <ArrowRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </div>
-              ) : selectedRoom.status === 'occupied' ? (
-                /* Occupied but no active stay found */
-                <div className="mt-6 space-y-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase">Type</p>
-                      <p className="text-sm font-medium">
-                        {selectedRoom.type === '1-bed' ? '1-Bed King' : '2-Bed Queen'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase">Rate</p>
-                      <p className="text-sm font-medium">${selectedRoom.rate}/night</p>
-                    </div>
-                  </div>
                   <Separator />
-                  <div className="text-center py-6 text-muted-foreground">
-                    <User className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm font-medium">No active guest</p>
-                    <p className="text-xs">This room is marked occupied but has no linked stay.</p>
+
+                  <div className="flex gap-3">
+                    <Button variant="outline" className="flex-1" onClick={() => setEditing(false)}>
+                      <X className="w-4 h-4 mr-1.5" /> Cancel
+                    </Button>
+                    <Button className="flex-1" onClick={handleSaveEdit}>
+                      <Check className="w-4 h-4 mr-1.5" /> Save
+                    </Button>
                   </div>
                 </div>
               ) : (
-                /* ── NON-OCCUPIED ROOM: Simple info + status change ── */
-                <div className="mt-6 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase">Floor</p>
-                      <p className="text-sm font-medium">{selectedRoom.floor}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase">Type</p>
-                      <p className="text-sm font-medium">
-                        {selectedRoom.type === '1-bed' ? '1-Bed King' : '2-Bed Queen'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase">Rate</p>
-                      <p className="text-sm font-medium">${selectedRoom.rate}/night</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase">Status</p>
-                      <Badge
-                        variant={
-                          selectedRoom.status === 'available' ? 'secondary' :
-                          selectedRoom.status === 'occupied' ? 'destructive' : 'outline'
-                        }
-                        className="capitalize text-xs"
+                <>
+                  {/* ── OCCUPIED ROOM: Rich guest detail ── */}
+                  {selectedRoom.status === 'occupied' && activeStay ? (
+                    <div className="mt-8 space-y-6">
+                      {/* Room basics */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Type</p>
+                          <p className="text-sm font-medium flex items-center gap-1.5">
+                            {selectedRoom.type === '1-bed' ? <BedSingle className="w-4 h-4" /> : <BedDouble className="w-4 h-4" />}
+                            {selectedRoom.type === '1-bed' ? '1-Bed King' : '2-Bed Queen'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Rate</p>
+                          <p className="text-sm font-medium">${selectedRoom.rate}/night</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Floor</p>
+                          <p className="text-sm font-medium">{selectedRoom.floor}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Status</p>
+                          <Badge variant="destructive" className="text-[10px] uppercase">Occupied</Badge>
+                        </div>
+                      </div>
+
+                      <Separator className="my-2" />
+
+                      {/* Guest Profile */}
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5" /> Current Guest
+                        </p>
+                        <div className="flex items-center gap-4">
+                          <Avatar className="h-12 w-12 shrink-0">
+                            <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
+                              {(activeStay.guest.firstName || '?')[0]}{(activeStay.guest.lastName || '?')[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="space-y-1.5">
+                            <p className="text-sm font-semibold">
+                              {activeStay.guest.firstName} {activeStay.guest.lastName}
+                            </p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                              <Phone className="w-3 h-3 shrink-0" /> {activeStay.guest.phone}
+                            </p>
+                            {activeStay.guest.email && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                <Mail className="w-3 h-3 shrink-0" /> {activeStay.guest.email}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Check-in / Check-out */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-muted/40 rounded-lg p-4">
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-2 flex items-center gap-1">
+                            <Calendar className="w-3 h-3" /> Check-in
+                          </p>
+                          <p className="text-sm font-medium">{activeStay.checkInDate}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{activeStay.checkInTime}</p>
+                        </div>
+                        <div className="bg-muted/40 rounded-lg p-4">
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-2 flex items-center gap-1">
+                            <Calendar className="w-3 h-3" /> Check-out
+                          </p>
+                          <p className="text-sm font-medium">{activeStay.checkOutDate}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{activeStay.checkOutTime}</p>
+                        </div>
+                      </div>
+
+                      {/* Identification Details */}
+                      {(activeStay.guest.idNumber || activeStay.guest.dateOfBirth || activeStay.guest.idType) && (
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
+                            <Shield className="w-3.5 h-3.5" /> Identification
+                          </p>
+                          <div className="bg-muted/40 rounded-lg p-4 space-y-3">
+                            {activeStay.guest.idType && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">ID Type</span>
+                                <span className="font-medium">{activeStay.guest.idType}</span>
+                              </div>
+                            )}
+                            {activeStay.guest.idNumber && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">ID Number</span>
+                                <span className="font-medium font-mono">{activeStay.guest.idNumber}</span>
+                              </div>
+                            )}
+                            {activeStay.guest.idState && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">State</span>
+                                <span className="font-medium">{activeStay.guest.idState}</span>
+                              </div>
+                            )}
+                            {activeStay.guest.dateOfBirth && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">Date of Birth</span>
+                                <span className="font-medium">{activeStay.guest.dateOfBirth}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ID Photo */}
+                      {activeStay.guest.idPhotoUrl && (
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
+                            <ImageIcon className="w-3.5 h-3.5" /> ID Photo on File
+                          </p>
+                          <div className="rounded-lg overflow-hidden border border-border bg-muted/20 p-2">
+                            <img
+                              src={activeStay.guest.idPhotoUrl}
+                              alt="ID Photo"
+                              className="w-full max-h-44 object-contain"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Payments Summary */}
+                      {activeStay.payments && activeStay.payments.length > 0 && (
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
+                            <CreditCard className="w-3.5 h-3.5" /> Payments
+                          </p>
+                          <div className="bg-muted/40 rounded-lg p-4 space-y-3">
+                            {activeStay.payments.map((p) => (
+                              <div key={p.id} className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">{p.description}</span>
+                                <span className="font-medium">${p.amount}</span>
+                              </div>
+                            ))}
+                            <Separator className="my-1" />
+                            <div className="flex justify-between text-xs font-semibold">
+                              <span>Total</span>
+                              <span>${activeStay.payments.reduce((sum, p) => sum + p.amount, 0)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <Separator className="my-2" />
+
+                      {/* View Details Button */}
+                      <Button
+                        className="w-full h-11 text-sm"
+                        onClick={() => router.push(`/stay/${activeStay.id}`)}
                       >
-                        {selectedRoom.status}
-                      </Badge>
+                        <FileText className="w-4 h-4 mr-2" />
+                        View Full Details
+                        <ArrowRight className="w-4 h-4 ml-1" />
+                      </Button>
                     </div>
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase mb-2">Change Status</p>
-                    <div className="flex flex-wrap gap-2">
-                      {(['available', 'occupied', 'maintenance', 'cleaning', 'reserved'] as const).map((status) => (
-                        <Button
-                          key={status}
-                          variant={selectedRoom.status === status ? 'default' : 'outline'}
-                          size="sm"
-                          className="capitalize text-xs"
-                          onClick={() => {
-                            updateRoomStatus(selectedRoom.id, status);
-                            setSelectedRoom({ ...selectedRoom, status });
-                          }}
-                        >
-                          {status}
-                        </Button>
-                      ))}
+                  ) : selectedRoom.status === 'occupied' ? (
+                    /* Occupied but no active stay found */
+                    <div className="mt-8 space-y-5">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Type</p>
+                          <p className="text-sm font-medium">
+                            {selectedRoom.type === '1-bed' ? '1-Bed King' : '2-Bed Queen'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Rate</p>
+                          <p className="text-sm font-medium">${selectedRoom.rate}/night</p>
+                        </div>
+                      </div>
+                      <Separator />
+                      <div className="text-center py-6 text-muted-foreground">
+                        <User className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                        <p className="text-sm font-medium">No active guest</p>
+                        <p className="text-xs">This room is marked occupied but has no linked stay.</p>
+                      </div>
                     </div>
+                  ) : null}
+
+                  {/* ── COMMON: Status Change + Edit + Delete (for ALL room states) ── */}
+                  {!(selectedRoom.status === 'occupied' && activeStay) && (
+                    <div className="mt-6 space-y-5">
+                      {/* Room info for non-occupied with guest detail */}
+                      {selectedRoom.status !== 'occupied' && (
+                        <>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Type</p>
+                              <p className="text-sm font-medium flex items-center gap-1.5">
+                                {selectedRoom.type === '1-bed' ? <BedSingle className="w-4 h-4" /> : <BedDouble className="w-4 h-4" />}
+                                {selectedRoom.type === '1-bed' ? '1-Bed King' : '2-Bed Queen'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Rate</p>
+                              <p className="text-sm font-medium">${selectedRoom.rate}/night</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Floor</p>
+                              <p className="text-sm font-medium">{selectedRoom.floor}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Status</p>
+                              <Badge
+                                variant={selectedRoom.status === 'available' ? 'secondary' : 'outline'}
+                                className="capitalize text-[10px]"
+                              >
+                                {selectedRoom.status}
+                              </Badge>
+                            </div>
+                          </div>
+                          <Separator />
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Status Change + Actions (always visible) ── */}
+                  <div className="space-y-5 mt-6">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3">Change Status</p>
+                      <div className="flex flex-wrap gap-2">
+                        {STATUS_OPTIONS.map((s) => (
+                          <Button
+                            key={s.value}
+                            variant={selectedRoom.status === s.value ? 'default' : 'outline'}
+                            size="sm"
+                            className="text-xs gap-1.5"
+                            onClick={() => {
+                              updateRoomStatus(selectedRoom.id, s.value);
+                              setSelectedRoom({ ...selectedRoom, status: s.value });
+                            }}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${s.color} shrink-0`} />
+                            {s.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        className="flex-1 h-10 text-xs"
+                        onClick={startEditing}
+                      >
+                        <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Room
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="flex-1 h-10 text-xs"
+                        onClick={() => setShowDeleteConfirm(true)}
+                        disabled={selectedRoom.status === 'occupied'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Room
+                      </Button>
+                    </div>
+                    {selectedRoom.status === 'occupied' && (
+                      <p className="text-[10px] text-muted-foreground text-center">
+                        Cannot delete an occupied room. Check out the guest first.
+                      </p>
+                    )}
                   </div>
-                </div>
+                </>
               )}
             </>
           )}

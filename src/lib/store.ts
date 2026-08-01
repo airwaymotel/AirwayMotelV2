@@ -189,7 +189,10 @@ interface MotelStore {
   loadFromSupabase: () => Promise<void>;
 
   // Room operations
+  addRoom: (room: Omit<Room, 'id'>) => Promise<string>;
   updateRoomStatus: (roomId: string, status: Room['status']) => void;
+  updateRoom: (roomId: string, updates: Partial<Omit<Room, 'id'>>) => void;
+  deleteRoom: (roomId: string) => Promise<void>;
 
   // Guest operations
   addGuest: (guest: Omit<Guest, 'id' | 'createdAt'>) => Promise<string>;
@@ -252,6 +255,32 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
   },
 
   // ── Room operations ──
+  addRoom: async (roomData) => {
+    // Sync to Supabase first to get the real UUID
+    if (isSupabaseConnected) {
+      const result = await postToApi<{ id: string }>('/api/rooms', {
+        room_number: roomData.roomNumber,
+        type: roomData.type,
+        floor: roomData.floor,
+        status: roomData.status,
+      });
+
+      if (result?.id) {
+        set((state) => ({
+          rooms: [...state.rooms, { ...roomData, id: result.id }].sort((a, b) => a.floor - b.floor || a.roomNumber.localeCompare(b.roomNumber)),
+        }));
+        return result.id;
+      }
+    }
+
+    // Fallback: generate a local ID
+    const id = generateId();
+    set((state) => ({
+      rooms: [...state.rooms, { ...roomData, id }].sort((a, b) => a.floor - b.floor || a.roomNumber.localeCompare(b.roomNumber)),
+    }));
+    return id;
+  },
+
   updateRoomStatus: (roomId, status) => {
     set((state) => ({
       rooms: state.rooms.map((r) => (r.id === roomId ? { ...r, status } : r)),
@@ -261,6 +290,42 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
     if (isSupabaseConnected) {
       patchApi('/api/rooms', { id: roomId, status });
     }
+  },
+
+  updateRoom: (roomId, updates) => {
+    set((state) => ({
+      rooms: state.rooms.map((r) => (r.id === roomId ? { ...r, ...updates } : r)),
+    }));
+
+    // Sync to Supabase
+    if (isSupabaseConnected) {
+      const snakeUpdates: Record<string, unknown> = {};
+      if (updates.roomNumber !== undefined) snakeUpdates.room_number = updates.roomNumber;
+      if (updates.type !== undefined) snakeUpdates.type = updates.type;
+      if (updates.floor !== undefined) snakeUpdates.floor = updates.floor;
+      if (updates.status !== undefined) snakeUpdates.status = updates.status;
+      patchApi('/api/rooms', { id: roomId, ...snakeUpdates });
+    }
+  },
+
+  deleteRoom: async (roomId) => {
+    // Sync to Supabase
+    if (isSupabaseConnected) {
+      try {
+        const res = await fetch(`/api/rooms?id=${roomId}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || 'Failed to delete room');
+        }
+      } catch (err) {
+        console.error('Failed to delete room from Supabase:', err);
+        throw err;
+      }
+    }
+
+    set((state) => ({
+      rooms: state.rooms.filter((r) => r.id !== roomId),
+    }));
   },
 
   // ── Guest operations ──
