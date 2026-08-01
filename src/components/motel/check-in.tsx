@@ -211,7 +211,7 @@ export default function CheckIn() {
     setSubmitting(true);
 
     try {
-      const guestId = addGuest({
+      const guestId = await addGuest({
         firstName,
         lastName,
         phone,
@@ -223,7 +223,7 @@ export default function CheckIn() {
         idState: idState || undefined,
       });
 
-      const stayId = addStay({
+      const stayId = await addStay({
         guestId,
         roomId: selectedRoomId,
         checkInDate,
@@ -236,14 +236,14 @@ export default function CheckIn() {
         tvRemoteDeposit: 10,
       });
 
-      addPayment({
+      await addPayment({
         stayId,
         amount: rate,
         method: paymentMethod,
         description: `Room charge (1 night, ${roomType})`,
       });
 
-      addPayment({
+      await addPayment({
         stayId,
         amount: 20,
         method: paymentMethod,

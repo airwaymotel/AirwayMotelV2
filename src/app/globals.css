@@ -119,4 +119,13 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Pointer cursor for all interactive elements */
+  button, [role="button"], a, select, input[type="checkbox"], input[type="radio"],
+  summary, [tabindex]:not([tabindex="-1"]), .cursor-pointer {
+    cursor: pointer !important;
+  }
+  /* Also apply to cards and any clickable container */
+  [onclick], button *, a * {
+    cursor: pointer !important;
+  }
 }

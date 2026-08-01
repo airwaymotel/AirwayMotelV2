@@ -192,14 +192,14 @@ interface MotelStore {
   updateRoomStatus: (roomId: string, status: Room['status']) => void;
 
   // Guest operations
-  addGuest: (guest: Omit<Guest, 'id' | 'createdAt'>) => string;
+  addGuest: (guest: Omit<Guest, 'id' | 'createdAt'>) => Promise<string>;
 
   // Stay operations
-  addStay: (stay: Omit<Stay, 'id' | 'createdAt'>) => string;
+  addStay: (stay: Omit<Stay, 'id' | 'createdAt'>) => Promise<string>;
   checkoutStay: (stayId: string) => void;
 
   // Payment operations
-  addPayment: (payment: Omit<Payment, 'id' | 'paidAt'>) => void;
+  addPayment: (payment: Omit<Payment, 'id' | 'paidAt'>) => Promise<void>;
 
   // Activity log
   addActivity: (entry: Omit<ActivityLog, 'id'>) => void;
@@ -264,17 +264,12 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
   },
 
   // ── Guest operations ──
-  addGuest: (guestData) => {
-    const id = generateId();
+  addGuest: async (guestData) => {
     const now = new Date().toISOString();
 
-    set((state) => ({
-      guests: [...state.guests, { ...guestData, id, createdAt: now }],
-    }));
-
-    // Sync to Supabase
+    // Sync to Supabase first to get the real UUID
     if (isSupabaseConnected) {
-      postToApi('/api/guests', {
+      const result = await postToApi<{ id: string }>('/api/guests', {
         first_name: guestData.firstName,
         last_name: guestData.lastName,
         phone: guestData.phone,
@@ -285,23 +280,31 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
         id_type: guestData.idType || null,
         id_state: guestData.idState || null,
       });
+
+      if (result?.id) {
+        // Use the Supabase UUID as the local ID so everything matches
+        set((state) => ({
+          guests: [...state.guests, { ...guestData, id: result.id, createdAt: now }],
+        }));
+        return result.id;
+      }
     }
 
+    // Fallback: generate a local ID
+    const id = generateId();
+    set((state) => ({
+      guests: [...state.guests, { ...guestData, id, createdAt: now }],
+    }));
     return id;
   },
 
   // ── Stay operations ──
-  addStay: (stayData) => {
-    const id = generateId();
+  addStay: async (stayData) => {
     const now = new Date().toISOString();
 
-    set((state) => ({
-      stays: [...state.stays, { ...stayData, id, createdAt: now }],
-    }));
-
-    // Sync to Supabase
+    // Sync to Supabase first to get the real UUID
     if (isSupabaseConnected) {
-      postToApi('/api/stays', {
+      const result = await postToApi<{ id: string }>('/api/stays', {
         guest_id: stayData.guestId,
         room_id: stayData.roomId,
         rate_type: 'daily',
@@ -314,8 +317,20 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
         key_deposit: stayData.keyDeposit,
         tv_remote_deposit: stayData.tvRemoteDeposit,
       });
+
+      if (result?.id) {
+        set((state) => ({
+          stays: [...state.stays, { ...stayData, id: result.id, createdAt: now }],
+        }));
+        return result.id;
+      }
     }
 
+    // Fallback: generate a local ID
+    const id = generateId();
+    set((state) => ({
+      stays: [...state.stays, { ...stayData, id, createdAt: now }],
+    }));
     return id;
   },
 
@@ -337,22 +352,30 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
   },
 
   // ── Payment operations ──
-  addPayment: (paymentData) => {
+  addPayment: async (paymentData) => {
     const now = new Date().toISOString();
 
-    set((state) => ({
-      payments: [...state.payments, { ...paymentData, id: generateId(), paidAt: now }],
-    }));
-
-    // Sync to Supabase
+    // Sync to Supabase first to get the real UUID
     if (isSupabaseConnected) {
-      postToApi('/api/payments', {
+      const result = await postToApi<{ id: string }>('/api/payments', {
         stay_id: paymentData.stayId,
         amount: paymentData.amount,
         method: paymentData.method,
         notes: paymentData.description,
       });
+
+      if (result?.id) {
+        set((state) => ({
+          payments: [...state.payments, { ...paymentData, id: result.id, paidAt: now }],
+        }));
+        return;
+      }
     }
+
+    // Fallback: generate a local ID
+    set((state) => ({
+      payments: [...state.payments, { ...paymentData, id: generateId(), paidAt: now }],
+    }));
   },
 
   // ── Activity log (local only — not in Supabase) ──

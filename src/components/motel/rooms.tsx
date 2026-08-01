@@ -146,45 +146,45 @@ export default function Rooms() {
 
               {/* ── OCCUPIED ROOM: Rich guest detail ── */}
               {selectedRoom.status === 'occupied' && activeStay ? (
-                <div className="mt-6 space-y-5">
+                <div className="mt-8 space-y-6">
                   {/* Room basics */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase">Type</p>
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Type</p>
                       <p className="text-sm font-medium flex items-center gap-1.5">
                         {selectedRoom.type === '1-bed' ? <BedSingle className="w-4 h-4" /> : <BedDouble className="w-4 h-4" />}
                         {selectedRoom.type === '1-bed' ? '1-Bed King' : '2-Bed Queen'}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase">Rate</p>
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Rate</p>
                       <p className="text-sm font-medium">${selectedRoom.rate}/night</p>
                     </div>
                   </div>
 
-                  <Separator />
+                  <Separator className="my-2" />
 
                   {/* Guest Profile */}
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase mb-3 flex items-center gap-1.5">
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5" /> Current Guest
                     </p>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-11 w-11">
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-12 w-12 shrink-0">
                         <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
                           {(activeStay.guest.firstName || '?')[0]}{(activeStay.guest.lastName || '?')[0]}
                         </AvatarFallback>
                       </Avatar>
-                      <div>
+                      <div className="space-y-1.5">
                         <p className="text-sm font-semibold">
                           {activeStay.guest.firstName} {activeStay.guest.lastName}
                         </p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Phone className="w-3 h-3" /> {activeStay.guest.phone}
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                          <Phone className="w-3 h-3 shrink-0" /> {activeStay.guest.phone}
                         </p>
                         {activeStay.guest.email && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Mail className="w-3 h-3" /> {activeStay.guest.email}
+                          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            <Mail className="w-3 h-3 shrink-0" /> {activeStay.guest.email}
                           </p>
                         )}
                       </div>
@@ -193,29 +193,29 @@ export default function Rooms() {
 
                   {/* Check-in / Check-out */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-muted/40 rounded-lg p-3">
-                      <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-1 flex items-center gap-1">
+                    <div className="bg-muted/40 rounded-lg p-4">
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-2 flex items-center gap-1">
                         <Calendar className="w-3 h-3" /> Check-in
                       </p>
                       <p className="text-sm font-medium">{activeStay.checkInDate}</p>
-                      <p className="text-xs text-muted-foreground">{activeStay.checkInTime}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{activeStay.checkInTime}</p>
                     </div>
-                    <div className="bg-muted/40 rounded-lg p-3">
-                      <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-1 flex items-center gap-1">
+                    <div className="bg-muted/40 rounded-lg p-4">
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-2 flex items-center gap-1">
                         <Calendar className="w-3 h-3" /> Check-out
                       </p>
                       <p className="text-sm font-medium">{activeStay.checkOutDate}</p>
-                      <p className="text-xs text-muted-foreground">{activeStay.checkOutTime}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{activeStay.checkOutTime}</p>
                     </div>
                   </div>
 
                   {/* Identification Details */}
-                  {(activeStay.guest.idNumber || activeStay.guest.dateOfBirth) && (
+                  {(activeStay.guest.idNumber || activeStay.guest.dateOfBirth || activeStay.guest.idType) && (
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
                         <Shield className="w-3.5 h-3.5" /> Identification
                       </p>
-                      <div className="bg-muted/40 rounded-lg p-3 space-y-2">
+                      <div className="bg-muted/40 rounded-lg p-4 space-y-3">
                         {activeStay.guest.idType && (
                           <div className="flex justify-between text-xs">
                             <span className="text-muted-foreground">ID Type</span>
@@ -247,14 +247,14 @@ export default function Rooms() {
                   {/* ID Photo */}
                   {activeStay.guest.idPhotoUrl && (
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
                         <ImageIcon className="w-3.5 h-3.5" /> ID Photo on File
                       </p>
-                      <div className="rounded-lg overflow-hidden border border-border bg-muted/20">
+                      <div className="rounded-lg overflow-hidden border border-border bg-muted/20 p-2">
                         <img
                           src={activeStay.guest.idPhotoUrl}
                           alt="ID Photo"
-                          className="w-full max-h-40 object-contain"
+                          className="w-full max-h-44 object-contain"
                         />
                       </div>
                     </div>
@@ -263,10 +263,10 @@ export default function Rooms() {
                   {/* Payments Summary */}
                   {activeStay.payments && activeStay.payments.length > 0 && (
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3 flex items-center gap-1.5">
                         <CreditCard className="w-3.5 h-3.5" /> Payments
                       </p>
-                      <div className="bg-muted/40 rounded-lg p-3 space-y-2">
+                      <div className="bg-muted/40 rounded-lg p-4 space-y-3">
                         {activeStay.payments.map((p) => (
                           <div key={p.id} className="flex justify-between text-xs">
                             <span className="text-muted-foreground">{p.description}</span>
@@ -282,11 +282,11 @@ export default function Rooms() {
                     </div>
                   )}
 
-                  <Separator />
+                  <Separator className="my-2" />
 
                   {/* View Details Button */}
                   <Button
-                    className="w-full"
+                    className="w-full h-11 text-sm"
                     onClick={() => router.push(`/stay/${activeStay.id}`)}
                   >
                     <FileText className="w-4 h-4 mr-2" />
