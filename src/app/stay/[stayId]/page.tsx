@@ -61,12 +61,52 @@ export default function StayDetailsPage() {
             .single();
 
           if (!stayError && stayRow) {
-            const guest = stayRow.guests as unknown as Guest;
-            const room = stayRow.rooms as unknown as Room;
-            const sigs = (stayRow.signatures || []) as unknown as SignatureRecord[];
-            const pmts = (stayRow.payments || []) as unknown as Payment[];
+            // Map snake_case Supabase rows to camelCase app types
+            const g = stayRow.guests as Record<string, unknown>;
+            const r = stayRow.rooms as Record<string, unknown>;
 
-            // Map snake_case stay fields to camelCase
+            const guest: Guest = {
+              id: g.id as string,
+              firstName: (g.first_name as string) || '',
+              lastName: (g.last_name as string) || '',
+              phone: (g.phone as string) || '',
+              email: (g.email as string) || '',
+              idNumber: (g.id_number as string) || '',
+              dateOfBirth: g.date_of_birth ? String(g.date_of_birth) : '',
+              idPhotoUrl: (g.id_photo_url as string) || '',
+              idType: (g.id_type as string) || '',
+              idState: (g.id_state as string) || '',
+              createdAt: g.created_at as string,
+            };
+
+            const room: Room = {
+              id: r.id as string,
+              roomNumber: (r.room_number as string) || '',
+              floor: (r.floor as number) || 1,
+              type: (r.type as Room['type']) || '1-bed',
+              rate: r.type === '2-bed' ? 85 : 65,
+              status: (r.status as Room['status']) || 'available',
+            };
+
+            const rawSigs = (stayRow.signatures || []) as Record<string, unknown>[];
+            const signatures: SignatureRecord[] = rawSigs.map((s) => ({
+              id: s.id as string,
+              stay_id: s.stay_id as string,
+              guest_id: s.guest_id as string,
+              signature_data_url: (s.signature_data_url as string) || '',
+              signed_at: s.signed_at as string,
+            }));
+
+            const rawPmts = (stayRow.payments || []) as Record<string, unknown>[];
+            const pmts: Payment[] = rawPmts.map((p) => ({
+              id: p.id as string,
+              stayId: p.stay_id as string,
+              amount: p.amount as number,
+              method: (p.method as Payment['method']) || 'card',
+              description: (p.description as string) || '',
+              paidAt: p.paid_at as string,
+            }));
+
             const stay: Stay = {
               id: stayRow.id,
               guestId: stayRow.guest_id,
@@ -82,7 +122,7 @@ export default function StayDetailsPage() {
               createdAt: stayRow.created_at,
             };
 
-            setData({ stay, guest, room, payments: pmts, signatures: sigs });
+            setData({ stay, guest, room, payments: pmts, signatures });
             setLoading(false);
             return;
           }
@@ -172,7 +212,7 @@ export default function StayDetailsPage() {
           <div className="flex items-center gap-3">
             <Avatar className="h-12 w-12">
               <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold">
-                {guest.firstName[0]}{guest.lastName[0]}
+                {(guest.firstName || '?')[0]}{(guest.lastName || '?')[0]}
               </AvatarFallback>
             </Avatar>
             <div>

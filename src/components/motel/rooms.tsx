@@ -172,7 +172,7 @@ export default function Rooms() {
                     <div className="flex items-center gap-3">
                       <Avatar className="h-11 w-11">
                         <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
-                          {activeStay.guest.firstName[0]}{activeStay.guest.lastName[0]}
+                          {(activeStay.guest.firstName || '?')[0]}{(activeStay.guest.lastName || '?')[0]}
                         </AvatarFallback>
                       </Avatar>
                       <div>
