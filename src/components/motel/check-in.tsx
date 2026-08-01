@@ -82,7 +82,6 @@ export default function CheckIn() {
   const [scanReceived, setScanReceived] = useState(false);
   const [scannedImageUrl, setScannedImageUrl] = useState<string>('');
   const [scannedSignatureUrl, setScannedSignatureUrl] = useState<string>('');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const realtimeChannelRef = useRef<any>(null);
 
   const [completedStayId, setCompletedStayId] = useState('');
