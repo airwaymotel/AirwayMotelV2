@@ -1,0 +1,821 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useRef, useCallback } from 'react';
+     4→import {
+     5→  Camera, ScanLine, Upload, Loader2, CheckCircle, AlertCircle,
+     6→  X, RotateCcw, Image, SwitchCamera, ArrowLeft,
+     7→} from 'lucide-react';
+     8→import { Button } from '@/components/ui/button';
+     9→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    10→import { Badge } from '@/components/ui/badge';
+    11→import { Separator } from '@/components/ui/separator';
+    12→import { toast } from 'sonner';
+    13→
+    14→// ── Types ──────────────────────────────────────────────────────────
+    15→
+    16→export interface ScannedIdData {
+    17→  firstName: string;
+    18→  middleName: string;
+    19→  lastName: string;
+    20→  fullName: string;
+    21→  dateOfBirth: string;
+    22→  gender: string;
+    23→  address: {
+    24→    street: string;
+    25→    city: string;
+    26→    state: string;
+    27→    zipCode: string;
+    28→  };
+    29→  idNumber: string;
+    30→  idType: string;
+    31→  issuingState: string;
+    32→  expirationDate: string;
+    33→  issueDate: string;
+    34→  eyeColor: string;
+    35→  hairColor: string;
+    36→  height: string;
+    37→  weight: string;
+    38→  veteran: boolean;
+    39→  organDonor: boolean;
+    40→  realId: boolean;
+    41→}
+    42→
+    43→type ScanMode = 'choose' | 'barcode' | 'vision';
+    44→type ScanStatus = 'idle' | 'scanning' | 'processing' | 'success' | 'error';
+    45→
+    46→interface IdScannerProps {
+    47→  onScanComplete: (data: ScannedIdData, imageBase64?: string) => void;
+    48→  onClose?: () => void;
+    49→}
+    50→
+    51→// ── AAMVA PDF417 Parser ────────────────────────────────────────────
+    52→
+    53→function parseAAMVA(rawText: string): ScannedIdData | null {
+    54→  try {
+    55→    // AAMVA format starts with @\n followed by ANSI or AAMVA
+    56→    if (!rawText.includes('ANSI') && !rawText.includes('AAMVA')) {
+    57→      return null;
+    58→    }
+    59→
+    60→    const result: ScannedIdData = {
+    61→      firstName: '',
+    62→      middleName: '',
+    63→      lastName: '',
+    64→      fullName: '',
+    65→      dateOfBirth: '',
+    66→      gender: '',
+    67→      address: { street: '', city: '', state: '', zipCode: '' },
+    68→      idNumber: '',
+    69→      idType: 'Driver License',
+    70→      issuingState: '',
+    71→      expirationDate: '',
+    72→      issueDate: '',
+    73→      eyeColor: '',
+    74→      hairColor: '',
+    75→      height: '',
+    76→      weight: '',
+    77→      veteran: false,
+    78→      organDonor: false,
+    79→      realId: false,
+    80→    };
+    81→
+    82→    // Parse AAMVA subfiles
+    83→    const lines = rawText.split(/\r?\n/);
+    84→
+    85→    // Extract issuer ID (first 2 chars after ANSI/AAMVA)
+    86→    const headerMatch = rawText.match(/ANSI(\d{6})/);
+    87→    if (headerMatch) {
+    88→      const issuerId = headerMatch[1].substring(0, 2);
+    89→      // Map common issuer IDs to state codes
+    90→      const stateMap: Record<string, string> = {
+    91→        '08': 'CO', '06': 'CA', '12': 'FL', '17': 'IL',
+    92→        '36': 'NY', '42': 'PA', '48': 'TX', '26': 'MI',
+    93→        '39': 'OH', '13': 'GA', '27': 'MN', '25': 'MA',
+    94→        '34': 'NJ', '04': 'AR', '29': 'MO', '32': 'NV',
+    95→        '01': 'AL', '02': 'AK', '05': 'AZ', '09': 'CT',
+    96→        '10': 'DE', '11': 'DC', '15': 'HI', '16': 'ID',
+    97→        '18': 'IN', '19': 'IA', '20': 'KS', '21': 'KY',
+    98→        '22': 'LA', '23': 'ME', '24': 'MD', '28': 'MS',
+    99→        '30': 'MT', '31': 'NE', '33': 'NH', '35': 'NM',
+   100→        '37': 'NC', '38': 'ND', '40': 'OK', '41': 'OR',
+   101→        '44': 'RI', '45': 'SC', '46': 'SD', '47': 'TN',
+   102→        '49': 'UT', '50': 'VT', '51': 'VA', '53': 'WA',
+   103→        '54': 'WV', '55': 'WI', '56': 'WY',
+   104→      };
+   105→      result.issuingState = stateMap[issuerId] || issuerId;
+   106→    }
+   107→
+   108→    // Parse each line for AAMVA elements
+   109→    for (const line of lines) {
+   110→      // DAA - Full Name (Last, First Middle)
+   111→      const daaMatch = line.match(/^DAA(.+)/);
+   112→      if (daaMatch) {
+   113→        const nameParts = daaMatch[1].split(',').map(s => s.trim());
+   114→        if (nameParts.length >= 1) result.lastName = nameParts[0];
+   115→        if (nameParts.length >= 2) {
+   116→          const firstMiddle = nameParts[1].split(' ').map(s => s.trim());
+   117→          result.firstName = firstMiddle[0] || '';
+   118→          result.middleName = firstMiddle.slice(1).join(' ');
+   119→        }
+   120→        result.fullName = `${result.firstName} ${result.middleName} ${result.lastName}`.replace(/\s+/g, ' ').trim();
+   121→      }
+   122→
+   123→      // DAC - First Name
+   124→      const dacMatch = line.match(/^DAC(.+)/);
+   125→      if (dacMatch) result.firstName = dacMatch[1].trim();
+   126→
+   127→      // DAD - Middle Name
+   128→      const dadMatch = line.match(/^DAD(.+)/);
+   129→      if (dadMatch) result.middleName = dadMatch[1].trim();
+   130→
+   131→      // DCB - Last Name
+   132→      const dcbMatch = line.match(/^DCB(.+)/);
+   133→      if (dcbMatch) result.lastName = dcbMatch[1].trim();
+   134→
+   135→      // DCS - Last Name
+   136→      const dcsMatch = line.match(/^DCS(.+)/);
+   137→      if (dcsMatch) result.lastName = dcsMatch[1].trim();
+   138→
+   139→      // DBB - Date of Birth (YYYYMMDD or MMDDYYYY)
+   140→      const dbbMatch = line.match(/^DBB(.+)/);
+   141→      if (dbbMatch) {
+   142→        const dobRaw = dbbMatch[1].trim();
+   143→        if (dobRaw.length === 8) {
+   144→          // Could be YYYYMMDD or MMDDYYYY
+   145→          if (dobRaw.startsWith('19') || dobRaw.startsWith('20')) {
+   146→            result.dateOfBirth = `${dobRaw.slice(0,4)}-${dobRaw.slice(4,6)}-${dobRaw.slice(6,8)}`;
+   147→          } else {
+   148→            // MMDDYYYY
+   149→            result.dateOfBirth = `${dobRaw.slice(4,8)}-${dobRaw.slice(0,2)}-${dobRaw.slice(2,4)}`;
+   150→          }
+   151→        }
+   152→      }
+   153→
+   154→      // DBC - Gender
+   155→      const dbcMatch = line.match(/^DBC(.+)/);
+   156→      if (dbcMatch) {
+   157→        const g = dbcMatch[1].trim().toUpperCase();
+   158→        result.gender = g === '1' || g === 'M' ? 'Male' : g === '2' || g === 'F' ? 'Female' : g;
+   159→      }
+   160→
+   161→      // DAG - Street Address
+   162→      const dagMatch = line.match(/^DAG(.+)/);
+   163→      if (dagMatch) result.address.street = dagMatch[1].trim();
+   164→
+   165→      // DAI - City
+   166→      const daiMatch = line.match(/^DAI(.+)/);
+   167→      if (daiMatch) result.address.city = daiMatch[1].trim();
+   168→
+   169→      // DAJ - State
+   170→      const dajMatch = line.match(/^DAJ(.+)/);
+   171→      if (dajMatch) result.address.state = dajMatch[1].trim();
+   172→
+   173→      // DAK - ZIP + Country
+   174→      const dakMatch = line.match(/^DAK(.+)/);
+   175→      if (dakMatch) {
+   176→        const zipRaw = dakMatch[1].trim();
+   177→        result.address.zipCode = zipRaw.substring(0, 5);
+   178→      }
+   179→
+   180→      // DAQ - ID Number
+   181→      const daqMatch = line.match(/^DAQ(.+)/);
+   182→      if (daqMatch) result.idNumber = daqMatch[1].trim();
+   183→
+   184→      // DBA - Expiration Date
+   185→      const dbaMatch = line.match(/^DBA(.+)/);
+   186→      if (dbaMatch) {
+   187→        const expRaw = dbaMatch[1].trim();
+   188→        if (expRaw.length === 8) {
+   189→          if (expRaw.startsWith('20')) {
+   190→            result.expirationDate = `${expRaw.slice(0,4)}-${expRaw.slice(4,6)}-${expRaw.slice(6,8)}`;
+   191→          } else {
+   192→            result.expirationDate = `${expRaw.slice(4,8)}-${expRaw.slice(0,2)}-${expRaw.slice(2,4)}`;
+   193→          }
+   194→        }
+   195→      }
+   196→
+   197→      // DBD - Issue Date
+   198→      const dbdMatch = line.match(/^DBD(.+)/);
+   199→      if (dbdMatch) {
+   200→        const issRaw = dbdMatch[1].trim();
+   201→        if (issRaw.length === 8) {
+   202→          if (issRaw.startsWith('20')) {
+   203→            result.issueDate = `${issRaw.slice(0,4)}-${issRaw.slice(4,6)}-${issRaw.slice(6,8)}`;
+   204→          } else {
+   205→            result.issueDate = `${issRaw.slice(4,8)}-${issRaw.slice(0,2)}-${issRaw.slice(2,4)}`;
+   206→          }
+   207→        }
+   208→      }
+   209→
+   210→      // DAY - Eye Color
+   211→      const dayMatch = line.match(/^DAY(.+)/);
+   212→      if (dayMatch) {
+   213→        const eyeMap: Record<string, string> = {
+   214→          'BLK': 'Black', 'BLU': 'Blue', 'BRO': 'Brown', 'GRY': 'Gray',
+   215→          'GRN': 'Green', 'HAZ': 'Hazel', 'MAR': 'Maroon', 'DIC': 'Dichromatic',
+   216→        };
+   217→        result.eyeColor = eyeMap[dayMatch[1].trim().toUpperCase()] || dayMatch[1].trim();
+   218→      }
+   219→
+   220→      // DAZ - Hair Color
+   221→      const dazMatch = line.match(/^DAZ(.+)/);
+   222→      if (dazMatch) {
+   223→        const hairMap: Record<string, string> = {
+   224→          'BAL': 'Bald', 'BLK': 'Black', 'BLN': 'Blond', 'BRO': 'Brown',
+   225→          'GRY': 'Gray', 'RED': 'Red/Auburn', 'SDY': 'Sandy', 'WHI': 'White',
+   226→        };
+   227→        result.hairColor = hairMap[dazMatch[1].trim().toUpperCase()] || dazMatch[1].trim();
+   228→      }
+   229→
+   230→      // DAU - Height
+   231→      const dauMatch = line.match(/^DAU(.+)/);
+   232→      if (dauMatch) result.height = dauMatch[1].trim();
+   233→
+   234→      // DAW - Weight
+   235→      const dawMatch = line.match(/^DAW(.+)/);
+   236→      if (dawMatch) result.weight = dawMatch[1].trim();
+   237→
+   238→      // DCF - Document Discriminator
+   239→      // DCK - Inventory Control Number
+   240→
+   241→      // Check for ID type
+   242→      if (line.includes('ID') || line.includes('IDENTIFICATION')) {
+   243→        result.idType = 'State ID';
+   244→      }
+   245→    }
+   246→
+   247→    // Build full name if not set from DAA
+   248→    if (!result.fullName) {
+   249→      result.fullName = `${result.firstName} ${result.middleName} ${result.lastName}`.replace(/\s+/g, ' ').trim();
+   250→    }
+   251→
+   252→    // Set issuing state from address state if not found
+   253→    if (!result.issuingState && result.address.state) {
+   254→      result.issuingState = result.address.state;
+   255→    }
+   256→
+   257→    // Check if we got enough data
+   258→    if (!result.lastName && !result.firstName && !result.idNumber) {
+   259→      return null;
+   260→    }
+   261→
+   262→    return result;
+   263→  } catch {
+   264→    return null;
+   265→  }
+   266→}
+   267→
+   268→// ── Barcode Scanner Component ──────────────────────────────────────
+   269→
+   270→function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData) => void }) {
+   271→  const scannerRef = useRef<HTMLDivElement>(null);
+   272→  const html5QrRef = useRef<any>(null);
+   273→  const [status, setStatus] = useState<'starting' | 'scanning' | 'error'>('starting');
+   274→  const [errorMsg, setErrorMsg] = useState('');
+   275→
+   276→  useEffect(() => {
+   277→    let scanner: any = null;
+   278→    let mounted = true;
+   279→
+   280→    const startScanner = async () => {
+   281→      if (!scannerRef.current) return;
+   282→
+   283→      try {
+   284→        const { Html5Qrcode } = await import('html5-qrcode');
+   285→        scanner = new Html5Qrcode('id-barcode-scanner');
+   286→        html5QrRef.current = scanner;
+   287→
+   288→        await scanner.start(
+   289→          { facingMode: 'environment' },
+   290→          {
+   291→            fps: 10,
+   292→            qrbox: { width: 280, height: 200 },
+   293→            formatsToSupport: [
+   294→              // @ts-expect-error - PDF417 format constant
+   295→              0, // QR_CODE
+   296→              // The library auto-detects PDF417
+   297→            ],
+   298→          },
+   299→          (decodedText: string) => {
+   300→            // Try to parse as AAMVA
+   301→            const parsed = parseAAMVA(decodedText);
+   302→            if (parsed) {
+   303→              scanner.stop().catch(() => {});
+   304→              onScanSuccess(parsed);
+   305→            } else {
+   306→              // Even if not AAMVA, the barcode might contain useful data
+   307→              // Try to use it as an ID number
+   308→              if (decodedText.length > 3) {
+   309→                const partial: ScannedIdData = {
+   310→                  firstName: '',
+   311→                  middleName: '',
+   312→                  lastName: '',
+   313→                  fullName: '',
+   314→                  dateOfBirth: '',
+   315→                  gender: '',
+   316→                  address: { street: '', city: '', state: '', zipCode: '' },
+   317→                  idNumber: decodedText,
+   318→                  idType: 'State ID',
+   319→                  issuingState: '',
+   320→                  expirationDate: '',
+   321→                  issueDate: '',
+   322→                  eyeColor: '',
+   323→                  hairColor: '',
+   324→                  height: '',
+   325→                  weight: '',
+   326→                  veteran: false,
+   327→                  organDonor: false,
+   328→                  realId: false,
+   329→                };
+   330→                scanner.stop().catch(() => {});
+   331→                onScanSuccess(partial);
+   332→              }
+   333→            }
+   334→          },
+   335→          () => {
+   336→            // Scan failure - ignore, keep scanning
+   337→          }
+   338→        );
+   339→
+   340→        if (mounted) setStatus('scanning');
+   341→      } catch (err: any) {
+   342→        console.error('Scanner error:', err);
+   343→        if (mounted) {
+   344→          setStatus('error');
+   345→          setErrorMsg(err?.message || 'Failed to start camera. Please check permissions.');
+   346→        }
+   347→      }
+   348→    };
+   349→
+   350→    startScanner();
+   351→
+   352→    return () => {
+   353→      mounted = false;
+   354→      if (scanner) {
+   355→        scanner.stop().catch(() => {});
+   356→        scanner.clear().catch(() => {});
+   357→      }
+   358→    };
+   359→  }, [onScanSuccess]);
+   360→
+   361→  const handleRetry = async () => {
+   362→    setStatus('starting');
+   363→    setErrorMsg('');
+   364→    if (html5QrRef.current) {
+   365→      try {
+   366→        await html5QrRef.current.stop();
+   367→        html5QrRef.current.clear();
+   368→      } catch {}
+   369→    }
+   370→    // The useEffect will restart
+   371→  };
+   372→
+   373→  return (
+   374→    <div className="space-y-4">
+   375→      <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3]">
+   376→        <div id="id-barcode-scanner" ref={scannerRef} className="w-full h-full" />
+   377→
+   378→        {status === 'starting' && (
+   379→          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+   380→            <div className="text-center text-white">
+   381→              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+   382→              <p className="text-sm">Starting camera...</p>
+   383→            </div>
+   384→          </div>
+   385→        )}
+   386→
+   387→        {status === 'scanning' && (
+   388→          <div className="absolute inset-0 pointer-events-none">
+   389→            <div className="absolute inset-4 border-2 border-white/30 rounded-lg">
+   390→              <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-white rounded-tl-lg" />
+   391→              <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-white rounded-tr-lg" />
+   392→              <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-white rounded-bl-lg" />
+   393→              <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-white rounded-br-lg" />
+   394→            </div>
+   395→            <div className="absolute bottom-4 left-0 right-0 text-center">
+   396→              <p className="text-white/80 text-xs bg-black/50 inline-block px-3 py-1 rounded-full">
+   397→                Hold the back of the ID to the camera
+   398→              </p>
+   399→            </div>
+   400→          </div>
+   401→        )}
+   402→
+   403→        {status === 'error' && (
+   404→          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+   405→            <div className="text-center text-white px-4">
+   406→              <AlertCircle className="w-10 h-10 mx-auto mb-2 text-red-400" />
+   407→              <p className="text-sm mb-3">{errorMsg}</p>
+   408→              <Button variant="outline" size="sm" onClick={handleRetry}>
+   409→                <RotateCcw className="w-4 h-4 mr-1" /> Retry
+   410→              </Button>
+   411→            </div>
+   412→          </div>
+   413→        )}
+   414→      </div>
+   415→
+   416→      <p className="text-xs text-muted-foreground text-center">
+   417→        Position the <strong>PDF417 barcode</strong> on the back of the ID within the frame
+   418→      </p>
+   419→    </div>
+   420→  );
+   421→}
+   422→
+   423→// ── Vision Scanner Component ───────────────────────────────────────
+   424→
+   425→function VisionScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData, imageBase64: string) => void }) {
+   426→  const [status, setStatus] = useState<'idle' | 'processing' | 'error'>('idle');
+   427→  const [preview, setPreview] = useState<string | null>(null);
+   428→  const [errorMsg, setErrorMsg] = useState('');
+   429→  const fileInputRef = useRef<HTMLInputElement>(null);
+   430→  const cameraInputRef = useRef<HTMLInputElement>(null);
+   431→
+   432→  const processImage = useCallback(async (file: File) => {
+   433→    setStatus('processing');
+   434→    setErrorMsg('');
+   435→
+   436→    try {
+   437→      // Convert to base64
+   438→      const reader = new FileReader();
+   439→      const dataUrl = await new Promise<string>((resolve, reject) => {
+   440→        reader.onload = () => resolve(reader.result as string);
+   441→        reader.onerror = reject;
+   442→        reader.readAsDataURL(file);
+   443→      });
+   444→
+   445→      setPreview(dataUrl);
+   446→
+   447→      // Send to AI Vision API
+   448→      const res = await fetch('/api/scan-id', {
+   449→        method: 'POST',
+   450→        headers: { 'Content-Type': 'application/json' },
+   451→        body: JSON.stringify({ imageBase64: dataUrl }),
+   452→      });
+   453→
+   454→      if (!res.ok) {
+   455→        const err = await res.json().catch(() => ({}));
+   456→        throw new Error(err.error || 'Failed to process ID image');
+   457→      }
+   458→
+   459→      const { data } = await res.json();
+   460→      if (!data) {
+   461→        throw new Error('No data extracted from ID');
+   462→      }
+   463→
+   464→      onScanSuccess(data, dataUrl);
+   465→      setStatus('idle');
+   466→    } catch (err: any) {
+   467→      console.error('Vision scan error:', err);
+   468→      setStatus('error');
+   469→      setErrorMsg(err?.message || 'Failed to scan ID. Please try again.');
+   470→    }
+   471→  }, [onScanSuccess]);
+   472→
+   473→  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+   474→    const file = e.target.files?.[0];
+   475→    if (file) processImage(file);
+   476→  };
+   477→
+   478→  const handleRetry = () => {
+   479→    setStatus('idle');
+   480→    setPreview(null);
+   481→    setErrorMsg('');
+   482→  };
+   483→
+   484→  return (
+   485→    <div className="space-y-4">
+   486→      <input
+   487→        ref={fileInputRef}
+   488→        type="file"
+   489→        accept="image/*"
+   490→        onChange={handleFileChange}
+   491→        className="hidden"
+   492→      />
+   493→      <input
+   494→        ref={cameraInputRef}
+   495→        type="file"
+   496→        accept="image/*"
+   497→        capture="environment"
+   498→        onChange={handleFileChange}
+   499→        className="hidden"
+   500→      />
+   501→
+   502→      {status === 'idle' && !preview && (
+   503→        <div className="space-y-3">
+   504→          <div className="grid grid-cols-2 gap-3">
+   505→            <button
+   506→              onClick={() => cameraInputRef.current?.click()}
+   507→              className="p-6 rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer flex flex-col items-center gap-2"
+   508→            >
+   509→              <Camera className="w-8 h-8 text-muted-foreground" />
+   510→              <span className="text-sm font-medium">Take Photo</span>
+   511→              <span className="text-xs text-muted-foreground">Use camera</span>
+   512→            </button>
+   513→            <button
+   514→              onClick={() => fileInputRef.current?.click()}
+   515→              className="p-6 rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer flex flex-col items-center gap-2"
+   516→            >
+   517→              <Upload className="w-8 h-8 text-muted-foreground" />
+   518→              <span className="text-sm font-medium">Upload</span>
+   519→              <span className="text-xs text-muted-foreground">From gallery</span>
+   520→            </button>
+   521→          </div>
+   522→          <p className="text-xs text-muted-foreground text-center">
+   523→            Take a clear photo of the <strong>front of the ID</strong>
+   524→          </p>
+   525→        </div>
+   526→      )}
+   527→
+   528→      {status === 'processing' && preview && (
+   529→        <div className="space-y-3">
+   530→          <div className="relative rounded-xl overflow-hidden border border-border">
+   531→            <img src={preview} alt="ID Preview" className="w-full max-h-48 object-contain bg-muted/30" />
+   532→            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+   533→              <div className="text-center text-white">
+   534→                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+   535→                <p className="text-sm font-medium">Analyzing ID...</p>
+   536→                <p className="text-xs opacity-80">Extracting information with AI</p>
+   537→              </div>
+   538→            </div>
+   539→          </div>
+   540→        </div>
+   541→      )}
+   542→
+   543→      {status === 'error' && (
+   544→        <div className="space-y-3">
+   545→          {preview && (
+   546→            <div className="rounded-xl overflow-hidden border border-border">
+   547→              <img src={preview} alt="ID Preview" className="w-full max-h-48 object-contain bg-muted/30" />
+   548→            </div>
+   549→          )}
+   550→          <div className="text-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+   551→            <AlertCircle className="w-6 h-6 text-red-500 mx-auto mb-2" />
+   552→            <p className="text-sm text-red-600 dark:text-red-400">{errorMsg}</p>
+   553→          </div>
+   554→          <Button variant="outline" className="w-full" onClick={handleRetry}>
+   555→            <RotateCcw className="w-4 h-4 mr-2" /> Try Again
+   556→          </Button>
+   557→        </div>
+   558→      )}
+   559→    </div>
+   560→  );
+   561→}
+   562→
+   563→// ── Main ID Scanner Component ──────────────────────────────────────
+   564→
+   565→export default function IdScanner({ onScanComplete, onClose }: IdScannerProps) {
+   566→  const [mode, setMode] = useState<ScanMode>('choose');
+   567→  const [status, setStatus] = useState<ScanStatus>('idle');
+   568→  const [scannedData, setScannedData] = useState<ScannedIdData | null>(null);
+   569→  const [scannedImage, setScannedImage] = useState<string | undefined>();
+   570→
+   571→  const handleBarcodeScan = useCallback((data: ScannedIdData) => {
+   572→    setScannedData(data);
+   573→    setStatus('success');
+   574→    toast.success('ID barcode scanned successfully!');
+   575→  }, []);
+   576→
+   577→  const handleVisionScan = useCallback((data: ScannedIdData, imageBase64?: string) => {
+   578→    setScannedData(data);
+   579→    setScannedImage(imageBase64);
+   580→    setStatus('success');
+   581→    toast.success('ID scanned successfully with AI!');
+   582→  }, []);
+   583→
+   584→  const handleConfirm = () => {
+   585→    if (scannedData) {
+   586→      onScanComplete(scannedData, scannedImage);
+   587→    }
+   588→  };
+   589→
+   590→  const handleReset = () => {
+   591→    setScannedData(null);
+   592→    setScannedImage(undefined);
+   593→    setStatus('idle');
+   594→    setMode('choose');
+   595→  };
+   596→
+   597→  const handleBackToChoose = () => {
+   598→    setStatus('idle');
+   599→    setMode('choose');
+   600→  };
+   601→
+   602→  return (
+   603→    <div className="space-y-4">
+   604→      {/* Back button when in a scan mode */}
+   605→      {mode !== 'choose' && status === 'idle' && (
+   606→        <button
+   607→          onClick={handleBackToChoose}
+   608→          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+   609→        >
+   610→          <ArrowLeft className="w-4 h-4" />
+   611→          Back to scan options
+   612→        </button>
+   613→      )}
+   614→
+   615→      {/* ── Choose Scan Method ── */}
+   616→      {mode === 'choose' && status === 'idle' && (
+   617→        <Card>
+   618→          <CardHeader className="pb-3">
+   619→            <CardTitle className="text-lg">Scan Guest ID</CardTitle>
+   620→            <p className="text-sm text-muted-foreground">
+   621→              Choose how to scan the guest&apos;s ID to auto-fill their information.
+   622→            </p>
+   623→          </CardHeader>
+   624→          <CardContent className="space-y-3">
+   625→            {/* Option 1: Scan Barcode */}
+   626→            <button
+   627→              onClick={() => setMode('barcode')}
+   628→              className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
+   629→            >
+   630→              <div className="flex items-start gap-4">
+   631→                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center shrink-0">
+   632→                  <ScanLine className="w-6 h-6" />
+   633→                </div>
+   634→                <div className="flex-1">
+   635→                  <p className="font-semibold text-base">Scan Barcode (Back)</p>
+   636→                  <p className="text-sm text-muted-foreground mt-0.5">
+   637→                    Scan the PDF417 barcode on the back of the ID. Instant, 100% accurate.
+   638→                  </p>
+   639→                  <Badge variant="secondary" className="mt-2 text-[10px]">Recommended</Badge>
+   640→                </div>
+   641→              </div>
+   642→            </button>
+   643→
+   644→            {/* Option 2: Scan Front with AI */}
+   645→            <button
+   646→              onClick={() => setMode('vision')}
+   647→              className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
+   648→            >
+   649→              <div className="flex items-start gap-4">
+   650→                <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center shrink-0">
+   651→                  <Camera className="w-6 h-6" />
+   652→                </div>
+   653→                <div className="flex-1">
+   654→                  <p className="font-semibold text-base">Scan Front of ID</p>
+   655→                  <p className="text-sm text-muted-foreground mt-0.5">
+   656→                    Take a photo of the front. AI extracts all fields automatically. Use if barcode is damaged.
+   657→                  </p>
+   658→                  <Badge variant="outline" className="mt-2 text-[10px]">AI Powered</Badge>
+   659→                </div>
+   660→              </div>
+   661→            </button>
+   662→          </CardContent>
+   663→        </Card>
+   664→      )}
+   665→
+   666→      {/* Scanner Area */}
+   667→      {mode === 'barcode' && status === 'idle' && (
+   668→        <Card>
+   669→          <CardHeader className="pb-3">
+   670→            <CardTitle className="text-base flex items-center gap-2">
+   671→              <ScanLine className="w-5 h-5" /> Scan Barcode (Back of ID)
+   672→            </CardTitle>
+   673→            <p className="text-xs text-muted-foreground">
+   674→              Hold the back of the ID so the barcode is visible in the camera.
+   675→            </p>
+   676→          </CardHeader>
+   677→          <CardContent>
+   678→            <BarcodeScanner onScanSuccess={handleBarcodeScan} />
+   679→          </CardContent>
+   680→        </Card>
+   681→      )}
+   682→
+   683→      {mode === 'vision' && status === 'idle' && (
+   684→        <Card>
+   685→          <CardHeader className="pb-3">
+   686→            <CardTitle className="text-base flex items-center gap-2">
+   687→              <Camera className="w-5 h-5" /> Scan Front of ID
+   688→            </CardTitle>
+   689→            <p className="text-xs text-muted-foreground">
+   690→              Take a clear photo of the front of the ID. AI will extract all the information.
+   691→            </p>
+   692→          </CardHeader>
+   693→          <CardContent>
+   694→            <VisionScanner onScanSuccess={handleVisionScan} />
+   695→          </CardContent>
+   696→        </Card>
+   697→      )}
+   698→
+   699→      {/* Success - Show Extracted Data */}
+   700→      {status === 'success' && scannedData && (
+   701→        <Card>
+   702→          <CardHeader className="pb-3">
+   703→            <div className="flex items-center justify-between">
+   704→              <CardTitle className="text-base flex items-center gap-2">
+   705→                <CheckCircle className="w-5 h-5 text-green-500" /> ID Scanned Successfully
+   706→              </CardTitle>
+   707→              <Badge variant="secondary" className="text-[10px]">
+   708→                {mode === 'barcode' ? 'Barcode' : 'AI Vision'}
+   709→              </Badge>
+   710→            </div>
+   711→          </CardHeader>
+   712→          <CardContent className="space-y-4">
+   713→            {/* Name */}
+   714→            <div>
+   715→              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Full Name</p>
+   716→              <p className="text-sm font-medium">{scannedData.fullName || `${scannedData.firstName} ${scannedData.middleName} ${scannedData.lastName}`.trim()}</p>
+   717→            </div>
+   718→
+   719→            <div className="grid grid-cols-2 gap-3">
+   720→              {/* ID Number */}
+   721→              <div>
+   722→                <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">ID Number</p>
+   723→                <p className="text-sm font-medium font-mono">{scannedData.idNumber}</p>
+   724→              </div>
+   725→              {/* Date of Birth */}
+   726→              <div>
+   727→                <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Date of Birth</p>
+   728→                <p className="text-sm font-medium">{scannedData.dateOfBirth}</p>
+   729→              </div>
+   730→              {/* Gender */}
+   731→              <div>
+   732→                <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Gender</p>
+   733→                <p className="text-sm font-medium">{scannedData.gender}</p>
+   734→              </div>
+   735→              {/* ID Type & State */}
+   736→              <div>
+   737→                <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">ID Type</p>
+   738→                <p className="text-sm font-medium">{scannedData.idType}{scannedData.issuingState ? ` — ${scannedData.issuingState}` : ''}</p>
+   739→              </div>
+   740→            </div>
+   741→
+   742→            {/* Address */}
+   743→            {scannedData.address.street && (
+   744→              <div>
+   745→                <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Address</p>
+   746→                <p className="text-sm font-medium">
+   747→                  {scannedData.address.street}
+   748→                  {scannedData.address.city && `, ${scannedData.address.city}`}
+   749→                  {scannedData.address.state && `, ${scannedData.address.state}`}
+   750→                  {scannedData.address.zipCode && ` ${scannedData.address.zipCode}`}
+   751→                </p>
+   752→              </div>
+   753→            )}
+   754→
+   755→            {/* Physical Details */}
+   756→            {(scannedData.eyeColor || scannedData.height || scannedData.weight) && (
+   757→              <div className="grid grid-cols-3 gap-3">
+   758→                {scannedData.eyeColor && (
+   759→                  <div>
+   760→                    <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Eyes</p>
+   761→                    <p className="text-sm font-medium">{scannedData.eyeColor}</p>
+   762→                  </div>
+   763→                )}
+   764→                {scannedData.height && (
+   765→                  <div>
+   766→                    <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Height</p>
+   767→                    <p className="text-sm font-medium">{scannedData.height}</p>
+   768→                  </div>
+   769→                )}
+   770→                {scannedData.weight && (
+   771→                  <div>
+   772→                    <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Weight</p>
+   773→                    <p className="text-sm font-medium">{scannedData.weight}</p>
+   774→                  </div>
+   775→                )}
+   776→              </div>
+   777→            )}
+   778→
+   779→            {/* Dates */}
+   780→            <div className="grid grid-cols-2 gap-3">
+   781→              {scannedData.expirationDate && (
+   782→                <div>
+   783→                  <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Expires</p>
+   784→                  <p className="text-sm font-medium">{scannedData.expirationDate}</p>
+   785→                </div>
+   786→              )}
+   787→              {scannedData.issueDate && (
+   788→                <div>
+   789→                  <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Issued</p>
+   790→                  <p className="text-sm font-medium">{scannedData.issueDate}</p>
+   791→                </div>
+   792→              )}
+   793→            </div>
+   794→
+   795→            {/* Badges */}
+   796→            {(scannedData.veteran || scannedData.organDonor || scannedData.realId) && (
+   797→              <div className="flex gap-2 flex-wrap">
+   798→                {scannedData.veteran && <Badge variant="secondary" className="text-[10px]">Veteran</Badge>}
+   799→                {scannedData.organDonor && <Badge variant="secondary" className="text-[10px]">Organ Donor</Badge>}
+   800→                {scannedData.realId && <Badge variant="secondary" className="text-[10px]">REAL ID</Badge>}
+   801→              </div>
+   802→            )}
+   803→
+   804→            <Separator />
+   805→
+   806→            {/* Actions */}
+   807→            <div className="flex gap-3">
+   808→              <Button variant="outline" className="flex-1" onClick={handleReset}>
+   809→                <RotateCcw className="w-4 h-4 mr-2" /> Rescan
+   810→              </Button>
+   811→              <Button className="flex-1" onClick={handleConfirm}>
+   812→                <CheckCircle className="w-4 h-4 mr-2" /> Use This Data
+   813→              </Button>
+   814→            </div>
+   815→          </CardContent>
+   816→        </Card>
+   817→      )}
+   818→    </div>
+   819→  );
+   820→}
+   821→
