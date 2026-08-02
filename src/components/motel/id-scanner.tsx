@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Camera, ScanLine, Upload, Loader2, CheckCircle, AlertCircle,
-  X, RotateCcw, Image, SwitchCamera,
+  X, RotateCcw, Image, SwitchCamera, ArrowLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,7 +40,7 @@ export interface ScannedIdData {
   realId: boolean;
 }
 
-type ScanMode = 'barcode' | 'vision';
+type ScanMode = 'choose' | 'barcode' | 'vision';
 type ScanStatus = 'idle' | 'scanning' | 'processing' | 'success' | 'error';
 
 interface IdScannerProps {
@@ -563,7 +563,7 @@ function VisionScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData,
 // ── Main ID Scanner Component ──────────────────────────────────────
 
 export default function IdScanner({ onScanComplete, onClose }: IdScannerProps) {
-  const [mode, setMode] = useState<ScanMode>('barcode');
+  const [mode, setMode] = useState<ScanMode>('choose');
   const [status, setStatus] = useState<ScanStatus>('idle');
   const [scannedData, setScannedData] = useState<ScannedIdData | null>(null);
   const [scannedImage, setScannedImage] = useState<string | undefined>();
@@ -591,47 +591,87 @@ export default function IdScanner({ onScanComplete, onClose }: IdScannerProps) {
     setScannedData(null);
     setScannedImage(undefined);
     setStatus('idle');
+    setMode('choose');
+  };
+
+  const handleBackToChoose = () => {
+    setStatus('idle');
+    setMode('choose');
   };
 
   return (
     <div className="space-y-4">
-      {/* Mode Toggle */}
-      {status === 'idle' && (
-        <div className="flex items-center gap-2 p-1 bg-muted rounded-lg">
-          <button
-            onClick={() => setMode('barcode')}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all cursor-pointer ${
-              mode === 'barcode'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <ScanLine className="w-4 h-4" />
-            Scan Barcode
-          </button>
-          <button
-            onClick={() => setMode('vision')}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium transition-all cursor-pointer ${
-              mode === 'vision'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Image className="w-4 h-4" />
-            Scan Front
-          </button>
-        </div>
+      {/* Back button when in a scan mode */}
+      {mode !== 'choose' && status === 'idle' && (
+        <button
+          onClick={handleBackToChoose}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to scan options
+        </button>
+      )}
+
+      {/* ── Choose Scan Method ── */}
+      {mode === 'choose' && status === 'idle' && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Scan Guest ID</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Choose how to scan the guest&apos;s ID to auto-fill their information.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Option 1: Scan Barcode */}
+            <button
+              onClick={() => setMode('barcode')}
+              className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center shrink-0">
+                  <ScanLine className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-base">Scan Barcode (Back)</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Scan the PDF417 barcode on the back of the ID. Instant, 100% accurate.
+                  </p>
+                  <Badge variant="secondary" className="mt-2 text-[10px]">Recommended</Badge>
+                </div>
+              </div>
+            </button>
+
+            {/* Option 2: Scan Front with AI */}
+            <button
+              onClick={() => setMode('vision')}
+              className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center shrink-0">
+                  <Camera className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-base">Scan Front of ID</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Take a photo of the front. AI extracts all fields automatically. Use if barcode is damaged.
+                  </p>
+                  <Badge variant="outline" className="mt-2 text-[10px]">AI Powered</Badge>
+                </div>
+              </div>
+            </button>
+          </CardContent>
+        </Card>
       )}
 
       {/* Scanner Area */}
-      {status === 'idle' && mode === 'barcode' && (
+      {mode === 'barcode' && status === 'idle' && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <ScanLine className="w-5 h-5" /> Scan Barcode (Back of ID)
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Scan the PDF417 barcode on the back of the ID for instant, 100% accurate data extraction.
+              Hold the back of the ID so the barcode is visible in the camera.
             </p>
           </CardHeader>
           <CardContent>
@@ -640,14 +680,14 @@ export default function IdScanner({ onScanComplete, onClose }: IdScannerProps) {
         </Card>
       )}
 
-      {status === 'idle' && mode === 'vision' && (
+      {mode === 'vision' && status === 'idle' && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Image className="w-5 h-5" /> Scan Front of ID
+              <Camera className="w-5 h-5" /> Scan Front of ID
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Take a photo of the front of the ID. AI will extract all the information automatically.
+              Take a clear photo of the front of the ID. AI will extract all the information.
             </p>
           </CardHeader>
           <CardContent>

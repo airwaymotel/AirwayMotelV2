@@ -19,10 +19,11 @@ export default function Home() {
   const activeTab = useMotelStore((s) => s.activeTab);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
   const { theme, setTheme } = useTheme();
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState<Date | null>(null);
 
-  // Live clock — updates every second
+  // Live clock — updates every second (start after mount to avoid hydration mismatch)
   useEffect(() => {
+    setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -98,10 +99,10 @@ export default function Home() {
               {/* Clock */}
               <div className="text-right hidden sm:block">
                 <p className="text-[11px] text-muted-foreground font-mono tabular-nums tracking-tight">
-                  {now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {now?.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) ?? '---'}
                 </p>
                 <p className="text-[11px] text-amber-500 dark:text-amber-400 font-mono tabular-nums tracking-tight">
-                  {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+                  {now?.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) ?? '--:--:-- --'}
                 </p>
               </div>
 
