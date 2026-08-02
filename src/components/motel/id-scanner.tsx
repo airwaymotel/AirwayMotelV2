@@ -404,7 +404,7 @@ function VisionScanner({
   onSignatureReceived?: (signatureDataUrl: string, termsAccepted: boolean) => void;
 }) {
   const [subMode, setSubMode] = useState<'choose' | 'phone' | 'upload'>('choose');
-  const [status, setStatus] = useState<'idle' | 'processing' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'processing' | 'error' | 'preview'>('idle');
   const [preview, setPreview] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -444,7 +444,10 @@ function VisionScanner({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => processImage(reader.result as string);
+    reader.onload = () => {
+      setPreview(reader.result as string);
+      setStatus('preview');
+    };
     reader.readAsDataURL(file);
   };
 
@@ -458,8 +461,8 @@ function VisionScanner({
       // Prefer the uploaded image (already in the ids bucket). Fall back to base64.
       const imageUrl = payload.imageStorageUrl || payload.imageBase64;
       if (imageUrl) {
-        // Run the captured photo through Gemini for field extraction.
-        processImage(imageUrl);
+        setPreview(imageUrl);
+        setStatus('preview');
       } else {
         setStatus('error');
         setErrorMsg('No image received from phone.');
@@ -567,6 +570,39 @@ function VisionScanner({
               <p className="text-xs opacity-80">Extracting information with AI</p>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Preview ──
+  if (status === 'preview' && preview) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl overflow-hidden border border-border bg-black">
+          <img src={preview} alt="ID Preview" className="w-full max-h-64 object-contain" />
+        </div>
+        <div className="grid grid-cols-1 gap-2">
+          <Button 
+            className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white" 
+            onClick={() => processImage(preview)}
+          >
+            <Zap className="w-4 h-4" /> Extract Info with AI
+          </Button>
+          <Button 
+            variant="outline" 
+            className="w-full gap-2"
+            onClick={() => onScanSuccess({} as ScannedIdData, preview)}
+          >
+            <CheckCircle className="w-4 h-4" /> Just Use Photo
+          </Button>
+          <Button 
+            variant="ghost" 
+            className="w-full gap-2 text-muted-foreground"
+            onClick={handleRetry}
+          >
+            <RotateCcw className="w-4 h-4" /> Retake Photo
+          </Button>
         </div>
       </div>
     );
