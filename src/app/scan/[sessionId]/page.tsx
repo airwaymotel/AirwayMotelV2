@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
-  Camera, CheckCircle, RefreshCcw, Loader2, CameraOff, AlertTriangle,
+  Camera, CheckCircle, RefreshCcw, Loader2, CameraOff, AlertTriangle, ShieldAlert,
   Upload, AlertCircle, ScanLine,
 } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
@@ -29,6 +29,7 @@ const CAM_STATUS = {
   READY: 'ready',
   DENIED: 'denied',
   UNAVAILABLE: 'unavailable',
+  INSECURE: 'insecure',
 } as const;
 
 type CamStatus = (typeof CAM_STATUS)[keyof typeof CAM_STATUS];
@@ -75,6 +76,17 @@ export default function MobileScanPage() {
     setCamStatus(CAM_STATUS.REQUESTING);
     stopStream();
 
+    // Camera requires a Secure Context (HTTPS or localhost) on mobile browsers.
+    // Without it, navigator.mediaDevices is undefined and getUserMedia will throw.
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      setCamStatus(CAM_STATUS.INSECURE);
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCamStatus(CAM_STATUS.INSECURE);
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
@@ -90,8 +102,11 @@ export default function MobileScanPage() {
       }
       setCamStatus(CAM_STATUS.READY);
     } catch (err: unknown) {
-      const name = (err as Error).name;
-      if (name === 'NotAllowedError' || name === 'SecurityError') {
+      const name = (err as Error)?.name;
+      if (name === 'TypeError') {
+        // navigator.mediaDevices is undefined — not a secure context
+        setCamStatus(CAM_STATUS.INSECURE);
+      } else if (name === 'NotAllowedError' || name === 'SecurityError') {
         setCamStatus(CAM_STATUS.DENIED);
       } else {
         setCamStatus(CAM_STATUS.UNAVAILABLE);
@@ -153,6 +168,13 @@ export default function MobileScanPage() {
     if (!barcodeContainerRef.current) return;
     setBarcodeStatus('starting');
     setUploadError('');
+
+    // Camera requires a Secure Context (HTTPS or localhost)
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      setBarcodeStatus('error');
+      setUploadError('Secure connection required. The camera only works over HTTPS or localhost.');
+      return;
+    }
 
     try {
       const { Html5Qrcode } = await import('html5-qrcode');
@@ -368,6 +390,16 @@ export default function MobileScanPage() {
                 >
                   <RefreshCcw className="w-4 h-4" /> Retry
                 </button>
+              </Overlay>
+            )}
+
+            {camStatus === CAM_STATUS.INSECURE && !imageSrc && (
+              <Overlay>
+                <ShieldAlert className="w-12 h-12 text-white/80 mb-4" />
+                <p className="font-bold text-lg mb-1">Secure connection required</p>
+                <p className="text-white/60 text-sm max-w-xs">
+                  The camera only works over HTTPS or localhost. Please open this page via a secure QR link.
+                </p>
               </Overlay>
             )}
           </div>
