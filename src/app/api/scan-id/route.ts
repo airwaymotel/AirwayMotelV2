@@ -19,15 +19,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No image data provided' }, { status: 400 });
     }
 
-    // Parse data URI if present (e.g. "data:image/jpeg;base64,...")
+    // Parse data URI if present (e.g. "data:image/jpeg;base64,...") or fetch if it's a URL
     let mimeType = 'image/jpeg';
     let base64Data = imageBase64;
-    // Strip newlines just in case and match without the /s flag to fix TS error
-    const cleanBase64 = imageBase64.replace(/\n/g, '');
-    const dataUriMatch = cleanBase64.match(/^data:([^;,]+);base64,(.+)$/);
-    if (dataUriMatch) {
-      mimeType = dataUriMatch[1];
-      base64Data = dataUriMatch[2];
+    
+    if (imageBase64.startsWith('http')) {
+      const imgRes = await fetch(imageBase64);
+      if (!imgRes.ok) throw new Error('Failed to fetch image from URL');
+      const arrayBuffer = await imgRes.arrayBuffer();
+      base64Data = Buffer.from(arrayBuffer).toString('base64');
+      mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
+    } else {
+      // Strip newlines just in case and match without the /s flag to fix TS error
+      const cleanBase64 = imageBase64.replace(/\n/g, '');
+      const dataUriMatch = cleanBase64.match(/^data:([^;,]+);base64,(.+)$/);
+      if (dataUriMatch) {
+        mimeType = dataUriMatch[1];
+        base64Data = dataUriMatch[2];
+      }
     }
 
     const prompt = `You are an ID card scanner. Extract ALL readable information from this government-issued ID card. It could be a US driver's license, US state ID, passport (US or foreign), national ID card from any country, military ID, permanent resident card, or any other official identification document.
