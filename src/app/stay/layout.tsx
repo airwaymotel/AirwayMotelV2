@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Search, Sun, Moon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useMotelStore } from '@/lib/store';
@@ -13,6 +14,7 @@ export default function StayLayout({ children }: { children: React.ReactNode }) 
   const activeTab = useMotelStore((s) => s.activeTab);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
   const { theme, setTheme } = useTheme();
+  const pathname = usePathname();
 
   // Load data from Supabase if connected
   const loadFromSupabase = useMotelStore((s) => s.loadFromSupabase);
@@ -22,6 +24,10 @@ export default function StayLayout({ children }: { children: React.ReactNode }) 
 
   const isDark = theme === 'dark';
   const toggleTheme = () => setTheme(isDark ? 'light' : 'dark');
+
+  if (pathname.endsWith('/print')) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
