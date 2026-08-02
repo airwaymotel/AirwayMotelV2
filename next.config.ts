@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
+const isNetlify = process.env.NETLIFY === "true";
+
 const nextConfig: NextConfig = {
-  output: "standalone",
+  ...(isNetlify ? {} : { output: "standalone" as const }),
   /* config options here */
   typescript: {
     ignoreBuildErrors: true,
