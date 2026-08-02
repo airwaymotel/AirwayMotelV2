@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useMotelStore } from '@/lib/store';
 import type { Guest, Room, Stay, Payment } from '@/lib/types';
@@ -17,7 +17,9 @@ interface SignatureRecord {
 
 export default function PrintRegistrationPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const stayId = params.stayId as string;
+  const isDownload = searchParams.get('download') === 'true';
 
   const stays = useMotelStore((s) => s.stays);
   const guests = useMotelStore((s) => s.guests);
@@ -126,15 +128,35 @@ export default function PrintRegistrationPage() {
     load();
   }, [stayId, stays, guests, rooms, payments]);
 
-  // Trigger print dialog once data is loaded and rendered
+  // Trigger print dialog or PDF download once data is loaded and rendered
   useEffect(() => {
     if (data) {
-      const timer = setTimeout(() => {
-        window.print();
+      const timer = setTimeout(async () => {
+        if (isDownload) {
+          try {
+            // @ts-ignore
+            const html2pdf = (await import('html2pdf.js')).default;
+            const element = document.getElementById('pdf-content');
+            const opt = {
+              margin: 0.5,
+              filename: `registration_${data.guest.lastName}_${data.room.roomNumber}.pdf`,
+              image: { type: 'jpeg', quality: 0.98 },
+              html2canvas: { scale: 2 },
+              jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+            await html2pdf().set(opt).from(element).save();
+            setTimeout(() => window.close(), 1000); // close tab after download
+          } catch (err) {
+            console.error('Failed to generate PDF', err);
+            window.print(); // fallback
+          }
+        } else {
+          window.print();
+        }
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [data]);
+  }, [data, isDownload]);
 
   if (!data) {
     return (
@@ -175,7 +197,7 @@ export default function PrintRegistrationPage() {
         }
       `}} />
 
-      <div className="max-w-[8in] mx-auto text-[13px] leading-relaxed">
+      <div id="pdf-content" className="max-w-[8in] mx-auto text-[13px] leading-relaxed bg-white">
         
         {/* Top Section */}
         <div className="flex justify-between items-start mb-6 gap-8">
