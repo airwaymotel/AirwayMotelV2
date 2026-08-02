@@ -78,20 +78,62 @@ export default function Guests() {
     return uniqueGuests > 0 ? ((repeatGuests / uniqueGuests) * 100).toFixed(1) : '0';
   })();
 
+  const handleExportCSV = () => {
+    const headers = ['Guest Name', 'ID', 'Room', 'Stay Period', 'Details', 'Room Type', 'Status', 'Total Paid'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredData.map(row => 
+        `"${row.name}","${row.id}","${row.room}","${row.dates}","${row.details}","${row.roomType}","${row.status}","${row.paid}"`
+      )
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', `guest_history_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <div className="p-4 lg:p-6 space-y-4">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #print-area, #print-area * {
+            visibility: visible;
+          }
+          #print-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}} />
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Guest History</h2>
           <p className="text-muted-foreground mt-1">Search and review past guest records.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+        <div className="flex gap-2 no-print">
+          <Button variant="outline" size="sm" onClick={handleExportCSV}>
             <Download className="w-4 h-4 mr-1" />
             Export CSV
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handlePrint}>
             <Printer className="w-4 h-4 mr-1" />
             Print Report
           </Button>
@@ -136,7 +178,7 @@ export default function Guests() {
       </div>
 
       {/* Filters */}
-      <Card>
+      <Card className="no-print">
         <CardContent className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-5 relative">
@@ -179,19 +221,24 @@ export default function Guests() {
       </Card>
 
       {/* History Table */}
-      <Card>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="uppercase text-[10px]">Guest Name</TableHead>
-                <TableHead className="uppercase text-[10px]">Room #</TableHead>
-                <TableHead className="uppercase text-[10px]">Stay Period</TableHead>
-                <TableHead className="uppercase text-[10px] text-center">Status</TableHead>
-                <TableHead className="uppercase text-[10px] text-right">Total Paid</TableHead>
-                <TableHead className="uppercase text-[10px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
+      <div id="print-area">
+        <div className="mb-4 hidden print:block text-center">
+          <h1 className="text-xl font-bold">Airway Motel - Guest History Report</h1>
+          <p className="text-sm text-gray-500">Generated on {new Date().toLocaleDateString()}</p>
+        </div>
+        <Card>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="uppercase text-[10px]">Guest Name</TableHead>
+                  <TableHead className="uppercase text-[10px]">Room #</TableHead>
+                  <TableHead className="uppercase text-[10px]">Stay Period</TableHead>
+                  <TableHead className="uppercase text-[10px] text-center">Status</TableHead>
+                  <TableHead className="uppercase text-[10px] text-right">Total Paid</TableHead>
+                  <TableHead className="uppercase text-[10px] text-right no-print">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {filteredData.length > 0 ? (
                 filteredData.map((row, idx) => (
@@ -221,7 +268,7 @@ export default function Guests() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right text-sm font-medium">{row.paid}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right no-print">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="View Profile">
                           <User className="w-4 h-4" />
@@ -243,12 +290,13 @@ export default function Guests() {
             </TableBody>
           </Table>
         </div>
-        <div className="p-3 bg-muted/30 border-t border-border flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            Showing {filteredData.length} record{filteredData.length === 1 ? '' : 's'}
-          </p>
-        </div>
-      </Card>
+          <div className="p-3 bg-muted/30 border-t border-border flex items-center justify-between no-print">
+            <p className="text-xs text-muted-foreground">
+              Showing {filteredData.length} record{filteredData.length === 1 ? '' : 's'}
+            </p>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
