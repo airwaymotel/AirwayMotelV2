@@ -50,8 +50,9 @@ export default function MobileScanPage() {
   const isBarcodeMode = rawMode === 'barcode';
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const sigCanvas = useRef<SignatureCanvas>(null);
   const barcodeContainerRef = useRef<HTMLDivElement>(null);
   const html5QrRef = useRef<any>(null);
@@ -136,16 +137,46 @@ export default function MobileScanPage() {
   // ── Capture a frame from the video stream (photo mode) ──
   const capture = useCallback(() => {
     const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
+    const frame = frameRef.current;
+    if (!video || !video.videoWidth || !frame) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Calculate crop coordinates based on object-cover math
+    const videoRect = video.getBoundingClientRect();
+    const frameRect = frame.getBoundingClientRect();
+
+    const intrinsicWidth = video.videoWidth;
+    const intrinsicHeight = video.videoHeight;
+    
+    // object-cover scaling factor
+    const scale = Math.max(videoRect.width / intrinsicWidth, videoRect.height / intrinsicHeight);
+    
+    // Displayed dimensions of the video on screen
+    const renderedWidth = intrinsicWidth * scale;
+    const renderedHeight = intrinsicHeight * scale;
+    
+    // Offset of the top-left corner of the video relative to the container
+    const offsetX = (videoRect.width - renderedWidth) / 2;
+    const offsetY = (videoRect.height - renderedHeight) / 2;
+    
+    // Frame coordinates relative to the video container
+    const frameX = frameRect.left - videoRect.left;
+    const frameY = frameRect.top - videoRect.top;
+    
+    // Map frame coordinates to intrinsic video coordinates
+    const sx = (frameX - offsetX) / scale;
+    const sy = (frameY - offsetY) / scale;
+    const sw = frameRect.width / scale;
+    const sh = frameRect.height / scale;
+
+    canvas.width = sw;
+    canvas.height = sh;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Draw the cropped section
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
     setImageSrc(dataUrl);
     stopStream();
@@ -348,7 +379,7 @@ export default function MobileScanPage() {
 
             {camStatus === CAM_STATUS.READY && !imageSrc && (
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center px-6">
-                <div className="w-full max-w-md aspect-[1.586/1] relative">
+                <div ref={frameRef} className="w-full max-w-md aspect-[1.586/1] relative">
                   <div className="absolute inset-0 rounded-xl border-2 border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
                   <span className="absolute -top-7 left-0 text-[10px] font-bold tracking-widest text-white/80 uppercase">
                     Align ID within frame
