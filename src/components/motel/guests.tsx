@@ -49,6 +49,8 @@ export default function Guests() {
         paid: `$${totalPaid.toFixed(2)}`,
         checkInDate: stay.checkInDate,
         checkOutDate: stay.checkOutDate,
+        stayId: stay.id,
+        hasCash: stayPayments.some(p => p.method === 'cash'),
       };
     }).sort((a, b) => b.checkInDate.localeCompare(a.checkInDate));
   }, [stays, guests, rooms, payments]);
@@ -273,9 +275,17 @@ export default function Guests() {
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="View Profile">
                           <User className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Download Receipt">
-                          <Download className="w-4 h-4" />
-                        </Button>
+                        {row.hasCash && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-500/10" 
+                            title="Download Cash Receipt"
+                            onClick={() => window.open(`/stay/${row.stayId}/invoice?download=true`, '_blank')}
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

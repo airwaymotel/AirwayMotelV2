@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, User, Phone, Mail, Calendar, BedSingle, BedDouble,
   Shield, CreditCard, Banknote, Wallet, ImageIcon, PenLine,
-  CheckCircle, Clock, AlertTriangle, Loader2, Printer, Download,
+  CheckCircle, Clock, AlertTriangle, Loader2, Printer, Download, Receipt
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -200,6 +200,8 @@ export default function StayDetailsPage() {
     debit: <Wallet className="w-3.5 h-3.5" />,
   };
 
+  const hasCashPayments = data.payments.some(p => p.method === 'cash');
+
   return (
     <div className="p-4 lg:p-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -229,6 +231,16 @@ export default function StayDetailsPage() {
         </div>
         <div className="flex flex-col items-end gap-2 text-right">
           <div className="flex gap-2">
+            {hasCashPayments && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(`/stay/${stay.id}/invoice?download=true`, '_blank')}
+                className="hidden sm:flex border-green-500/30 text-green-600 hover:bg-green-500/10 hover:text-green-700"
+              >
+                <Receipt className="w-4 h-4 mr-2" /> Cash Receipt
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
