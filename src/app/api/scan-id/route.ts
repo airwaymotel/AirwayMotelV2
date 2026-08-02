@@ -54,7 +54,7 @@ Important rules:
 - If you see "IDENTIFICATION CARD" it's a State ID, not a Driver License
 - Look for the state name or abbreviation to determine issuingState
 - Check for veteran designation, organ donor, and REAL ID star
-- Return ONLY the JSON object, no additional text`,
+- Return ONLY the JSON object, no additional text, no markdown, no explanation`,
             },
             {
               type: 'image_url',
@@ -72,24 +72,104 @@ Important rules:
       return NextResponse.json({ error: 'No response from vision model' }, { status: 500 });
     }
 
-    // Try to parse the JSON from the response
-    let parsedData;
+    console.log('[Scan-ID] Raw model response (first 500 chars):', content.substring(0, 500));
+
+    // Try to parse the JSON from the response with multiple strategies
+    let parsedData = null;
+    let parseError = null;
+
+    // Strategy 1: Direct parse (model returned clean JSON)
     try {
-      // The model might wrap the JSON in markdown code blocks
+      parsedData = JSON.parse(content);
+    } catch (e) {
+      parseError = e;
+    }
+
+    // Strategy 2: Strip markdown code blocks and try again
+    if (!parsedData) {
+      const stripped = content
+        .replace(/```(?:json)?\s*/gi, '')
+        .replace(/```\s*/g, '')
+        .trim();
+      try {
+        parsedData = JSON.parse(stripped);
+      } catch {}
+    }
+
+    // Strategy 3: Find JSON object using balanced brace matching
+    if (!parsedData) {
+      const firstBrace = content.indexOf('{');
+      if (firstBrace !== -1) {
+        let depth = 0;
+        let lastBrace = -1;
+        for (let i = firstBrace; i < content.length; i++) {
+          if (content[i] === '{') depth++;
+          if (content[i] === '}') {
+            depth--;
+            if (depth === 0) {
+              lastBrace = i;
+              break;
+            }
+          }
+        }
+        if (lastBrace !== -1) {
+          const jsonStr = content.substring(firstBrace, lastBrace + 1);
+          try {
+            parsedData = JSON.parse(jsonStr);
+          } catch {}
+        }
+      }
+    }
+
+    // Strategy 4: Greedy regex as last resort
+    if (!parsedData) {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        parsedData = JSON.parse(jsonMatch[0]);
-      } else {
-        parsedData = JSON.parse(content);
+        try {
+          parsedData = JSON.parse(jsonMatch[0]);
+        } catch {}
       }
-    } catch {
+    }
+
+    if (!parsedData) {
+      console.error('[Scan-ID] All JSON parsing strategies failed. Raw content:', content);
       return NextResponse.json({
-        error: 'Failed to parse ID data',
-        raw: content,
+        error: 'Failed to parse ID data. The AI could not extract structured information from this image. Please try again with a clearer photo.',
+        raw: content.substring(0, 1000),
       }, { status: 422 });
     }
 
-    return NextResponse.json({ data: parsedData });
+    // Ensure the parsed data has the expected structure
+    const normalizedData = {
+      firstName: parsedData.firstName || '',
+      middleName: parsedData.middleName || '',
+      lastName: parsedData.lastName || '',
+      fullName: parsedData.fullName || '',
+      dateOfBirth: parsedData.dateOfBirth || '',
+      gender: parsedData.gender || '',
+      address: {
+        street: parsedData.address?.street || '',
+        city: parsedData.address?.city || '',
+        state: parsedData.address?.state || '',
+        zipCode: parsedData.address?.zipCode || '',
+      },
+      idNumber: parsedData.idNumber || '',
+      idType: parsedData.idType || 'Driver License',
+      issuingState: parsedData.issuingState || '',
+      expirationDate: parsedData.expirationDate || '',
+      issueDate: parsedData.issueDate || '',
+      eyeColor: parsedData.eyeColor || '',
+      hairColor: parsedData.hairColor || '',
+      height: parsedData.height || '',
+      weight: parsedData.weight || '',
+      veteran: parsedData.veteran === true,
+      organDonor: parsedData.organDonor === true,
+      realId: parsedData.realId === true,
+    };
+
+    console.log('[Scan-ID] Successfully parsed ID data:', normalizedData.fullName || 'No name found');
+
+    return NextResponse.json({ data: normalizedData });
   } catch (error) {
     console.error('Scan ID error:', error);
     return NextResponse.json(
