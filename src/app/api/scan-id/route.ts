@@ -1,25 +1,8 @@
 import { NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
-  try {
-    const { imageBase64 } = await request.json();
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
-    if (!imageBase64) {
-      return NextResponse.json({ error: 'No image data provided' }, { status: 400 });
-    }
-
-    // Use z-ai-web-dev-sdk for AI Vision
-    const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = await ZAI.create();
-
-    const response = await zai.chat.completions.createVision({
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `You are an ID card scanner. Extract all information from this US ID card (driver's license or state ID). Return ONLY valid JSON with these exact fields. If a field is not found, use an empty string.
+const ID_SCAN_PROMPT = `You are an ID card scanner. Extract all information from this US ID card (driver's license or state ID). Return ONLY valid JSON with these exact fields. If a field is not found, use an empty string.
 
 {
   "firstName": "",
@@ -54,19 +37,45 @@ Important rules:
 - If you see "IDENTIFICATION CARD" it's a State ID, not a Driver License
 - Look for the state name or abbreviation to determine issuingState
 - Check for veteran designation, organ donor, and REAL ID star
-- Return ONLY the JSON object, no additional text, no markdown, no explanation`,
-            },
-            {
-              type: 'image_url',
-              image_url: { url: imageBase64 },
-            },
-          ],
-        },
-      ],
-      thinking: { type: 'disabled' },
-    });
+- Return ONLY the JSON object, no additional text, no markdown, no explanation`;
 
-    const content = response.choices[0]?.message?.content;
+export async function POST(request: Request) {
+  try {
+    const { imageBase64 } = await request.json();
+
+    if (!imageBase64) {
+      return NextResponse.json({ error: 'No image data provided' }, { status: 400 });
+    }
+
+    // Use Google Gemini API for vision
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    // Extract base64 data and mime type from data URL
+    let mimeType = 'image/jpeg';
+    let base64Data = imageBase64;
+
+    if (imageBase64.startsWith('data:')) {
+      const matches = imageBase64.match(/^data:(.+?);base64,(.+)$/);
+      if (matches) {
+        mimeType = matches[1];
+        base64Data = matches[2];
+      }
+    }
+
+    const result = await model.generateContent([
+      { text: ID_SCAN_PROMPT },
+      {
+        inlineData: {
+          mimeType,
+          data: base64Data,
+        },
+      },
+    ]);
+
+    const content = result.response.text();
 
     if (!content) {
       return NextResponse.json({ error: 'No response from vision model' }, { status: 500 });
@@ -76,16 +85,13 @@ Important rules:
 
     // Try to parse the JSON from the response with multiple strategies
     let parsedData = null;
-    let parseError = null;
 
-    // Strategy 1: Direct parse (model returned clean JSON)
+    // Strategy 1: Direct parse
     try {
       parsedData = JSON.parse(content);
-    } catch (e) {
-      parseError = e;
-    }
+    } catch {}
 
-    // Strategy 2: Strip markdown code blocks and try again
+    // Strategy 2: Strip markdown code blocks
     if (!parsedData) {
       const stripped = content
         .replace(/```(?:json)?\s*/gi, '')
@@ -96,7 +102,7 @@ Important rules:
       } catch {}
     }
 
-    // Strategy 3: Find JSON object using balanced brace matching
+    // Strategy 3: Balanced brace matching
     if (!parsedData) {
       const firstBrace = content.indexOf('{');
       if (firstBrace !== -1) {
@@ -106,28 +112,22 @@ Important rules:
           if (content[i] === '{') depth++;
           if (content[i] === '}') {
             depth--;
-            if (depth === 0) {
-              lastBrace = i;
-              break;
-            }
+            if (depth === 0) { lastBrace = i; break; }
           }
         }
         if (lastBrace !== -1) {
-          const jsonStr = content.substring(firstBrace, lastBrace + 1);
           try {
-            parsedData = JSON.parse(jsonStr);
+            parsedData = JSON.parse(content.substring(firstBrace, lastBrace + 1));
           } catch {}
         }
       }
     }
 
-    // Strategy 4: Greedy regex as last resort
+    // Strategy 4: Greedy regex
     if (!parsedData) {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        try {
-          parsedData = JSON.parse(jsonMatch[0]);
-        } catch {}
+        try { parsedData = JSON.parse(jsonMatch[0]); } catch {}
       }
     }
 
@@ -139,7 +139,7 @@ Important rules:
       }, { status: 422 });
     }
 
-    // Ensure the parsed data has the expected structure
+    // Normalize the data
     const normalizedData = {
       firstName: parsedData.firstName || '',
       middleName: parsedData.middleName || '',
