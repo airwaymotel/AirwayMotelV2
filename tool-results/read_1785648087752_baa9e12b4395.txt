@@ -1,0 +1,892 @@
+     1→'use client';
+     2→
+     3→import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+     4→import {
+     5→  BedSingle, BedDouble, ArrowRight, ArrowLeft, CheckCircle,
+     6→  CreditCard, Banknote, Wallet, QrCode, PenLine, Upload,
+     7→  Camera, Loader2, X, ImageIcon, CheckCheck, Smartphone, Keyboard,
+     8→} from 'lucide-react';
+     9→import { QRCodeSVG } from 'qrcode.react';
+    10→import SignatureCanvas from 'react-signature-canvas';
+    11→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Input } from '@/components/ui/input';
+    14→import { Label } from '@/components/ui/label';
+    15→import { Badge } from '@/components/ui/badge';
+    16→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    17→import { Checkbox } from '@/components/ui/checkbox';
+    18→import { Separator } from '@/components/ui/separator';
+    19→import { useMotelStore } from '@/lib/store';
+    20→import { supabase } from '@/lib/supabase';
+    21→import { toast } from 'sonner';
+    22→import type { RoomType, PaymentMethod } from '@/lib/types';
+    23→
+    24→const STEPS = [
+    25→  'Room',
+    26→  'ID Method',
+    27→  'Guest Details',
+    28→  'ID & Scan',
+    29→  'Payment',
+    30→  'Terms & Sign',
+    31→  'Confirm',
+    32→];
+    33→
+    34→type IdMethod = 'manual' | 'phone-scan';
+    35→
+    36→export default function CheckIn() {
+    37→  const rooms = useMotelStore((s) => s.rooms);
+    38→  const addGuest = useMotelStore((s) => s.addGuest);
+    39→  const addStay = useMotelStore((s) => s.addStay);
+    40→  const addPayment = useMotelStore((s) => s.addPayment);
+    41→  const updateRoomStatus = useMotelStore((s) => s.updateRoomStatus);
+    42→  const addActivity = useMotelStore((s) => s.addActivity);
+    43→  const setActiveTab = useMotelStore((s) => s.setActiveTab);
+    44→
+    45→  // Step & method
+    46→  const [step, setStep] = useState(0);
+    47→  const [idMethod, setIdMethod] = useState<IdMethod | null>(null);
+    48→
+    49→  // Room selection
+    50→  const [roomType, setRoomType] = useState<RoomType>('1-bed');
+    51→  const [selectedRoomId, setSelectedRoomId] = useState('');
+    52→  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
+    53→  const [termsAccepted, setTermsAccepted] = useState(false);
+    54→
+    55→  // Guest form fields
+    56→  const [firstName, setFirstName] = useState('');
+    57→  const [lastName, setLastName] = useState('');
+    58→  const [phone, setPhone] = useState('');
+    59→  const [email, setEmail] = useState('');
+    60→  const [idNumber, setIdNumber] = useState('');
+    61→  const [idType, setIdType] = useState('Driver License');
+    62→  const [idState, setIdState] = useState('');
+    63→  const [dateOfBirth, setDateOfBirth] = useState('');
+    64→  const [checkInDate, setCheckInDate] = useState(() => new Date().toISOString().split('T')[0]);
+    65→  const [checkOutDate, setCheckOutDate] = useState(() =>
+    66→    new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    67→  );
+    68→  const [checkInTime, setCheckInTime] = useState('2:00 PM');
+    69→  const [checkOutTime, setCheckOutTime] = useState('10:00 AM');
+    70→
+    71→  // ID photo (manual upload)
+    72→  const [idPhotoPreview, setIdPhotoPreview] = useState<string | null>(null);
+    73→  const [idPhotoUrl, setIdPhotoUrl] = useState<string>('');
+    74→  const fileInputRef = useRef<HTMLInputElement>(null);
+    75→
+    76→  // Signature
+    77→  const sigCanvas = useRef<SignatureCanvas>(null);
+    78→  const [signatureDataUrl, setSignatureDataUrl] = useState<string>('');
+    79→
+    80→  // QR / Phone scan
+    81→  const [scanSessionId] = useState(() => Math.random().toString(36).substring(2, 10) + Date.now().toString(36));
+    82→  const [scanReceived, setScanReceived] = useState(false);
+    83→  const [scannedImageUrl, setScannedImageUrl] = useState<string>('');
+    84→  const [scannedSignatureUrl, setScannedSignatureUrl] = useState<string>('');
+    85→  const realtimeChannelRef = useRef<any>(null);
+    86→
+    87→  const [completedStayId, setCompletedStayId] = useState('');
+    88→  const [submitting, setSubmitting] = useState(false);
+    89→
+    90→  // ── Derived ──
+    91→  const availableRooms = useMemo(
+    92→    () => rooms.filter((r) => r.status === 'available' && r.type === roomType),
+    93→    [rooms, roomType]
+    94→  );
+    95→  const selectedRoom = rooms.find((r) => r.id === selectedRoomId);
+    96→  const rate = selectedRoom?.rate ?? (roomType === '1-bed' ? 65 : 85);
+    97→
+    98→  // ── QR URL (the mobile scan page) ──
+    99→  const scanUrl = typeof window !== 'undefined'
+   100→    ? `${window.location.origin}/scan/${scanSessionId}`
+   101→    : '';
+   102→
+   103→  // ── Supabase Realtime listener for phone scan ──
+   104→  useEffect(() => {
+   105→    if (!supabase || idMethod !== 'phone-scan' || step !== 3) return;
+   106→
+   107→    const channel = supabase.channel(`scan_${scanSessionId}`, {
+   108→      config: { broadcast: { self: true } },
+   109→    });
+   110→
+   111→    channel.on('broadcast', { event: 'id_scanned' }, (payload) => {
+   112→      const { imageUrl, signatureDataUrl: sigUrl } = payload.payload;
+   113→      if (imageUrl) {
+   114→        setScannedImageUrl(imageUrl);
+   115→        setIdPhotoUrl(imageUrl);
+   116→      }
+   117→      if (sigUrl) {
+   118→        setScannedSignatureUrl(sigUrl);
+   119→        setSignatureDataUrl(sigUrl);
+   120→      }
+   121→      setScanReceived(true);
+   122→      toast.success('ID scan received from phone!');
+   123→    });
+   124→
+   125→    channel.subscribe((status) => {
+   126→      if (status === 'SUBSCRIBED') {
+   127→        console.log('[Scan] Listening for ID scan on channel:', `scan_${scanSessionId}`);
+   128→      }
+   129→    });
+   130→
+   131→    realtimeChannelRef.current = channel;
+   132→
+   133→    return () => {
+   134→      if (supabase) supabase.removeChannel(channel);
+   135→      realtimeChannelRef.current = null;
+   136→    };
+   137→  }, [idMethod, step, scanSessionId]);
+   138→
+   139→  // ── Manual file upload handler ──
+   140→  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+   141→    const file = e.target.files?.[0];
+   142→    if (!file) return;
+   143→
+   144→    // Preview
+   145→    const reader = new FileReader();
+   146→    reader.onload = (ev) => setIdPhotoPreview(ev.target?.result as string);
+   147→    reader.readAsDataURL(file);
+   148→
+   149→    // Upload to Supabase Storage if connected
+   150→    if (supabase) {
+   151→      try {
+   152→        const fileName = `id_admin_${Date.now()}_${file.name}`;
+   153→        const { error } = await supabase.storage.from('ids').upload(fileName, file, {
+   154→          contentType: file.type,
+   155→          upsert: false,
+   156→        });
+   157→        if (error) {
+   158→          toast.error('Failed to upload ID image to storage');
+   159→          return;
+   160→        }
+   161→        const { data } = supabase.storage.from('ids').getPublicUrl(fileName);
+   162→        setIdPhotoUrl(data.publicUrl);
+   163→        toast.success('ID image uploaded');
+   164→      } catch {
+   165→        toast.error('Upload failed');
+   166→      }
+   167→    } else {
+   168→      // No Supabase — just use the data URL as preview
+   169→      setIdPhotoUrl(reader.result as string);
+   170→    }
+   171→  }, []);
+   172→
+   173→  // ── Step validation ──
+   174→  const canNext = (): boolean => {
+   175→    switch (step) {
+   176→      case 0: return availableRooms.length > 0;
+   177→      case 1: return idMethod !== null;
+   178→      case 2: return firstName.length >= 2 && lastName.length >= 2 && phone.length >= 10;
+   179→      case 3:
+   180→        if (idMethod === 'phone-scan') return scanReceived;
+   181→        return idNumber.length >= 4 && dateOfBirth.length > 0;
+   182→      case 4: return true;
+   183→      case 5:
+   184→        return termsAccepted;
+   185→      case 6: return false;
+   186→      default: return false;
+   187→    }
+   188→  };
+   189→
+   190→  const handleNext = () => {
+   191→    if (step < STEPS.length - 1) setStep(step + 1);
+   192→  };
+   193→
+   194→  const handleBack = () => {
+   195→    if (step > 0) setStep(step - 1);
+   196→  };
+   197→
+   198→  const handleSubmit = async () => {
+   199→    if (submitting) return;
+   200→
+   201→    if (!selectedRoomId || !selectedRoom) {
+   202→      toast.error('No room selected. Please go back and select a room.');
+   203→      return;
+   204→    }
+   205→
+   206→    if (!termsAccepted) {
+   207→      toast.error('Please accept the terms and conditions before completing check-in.');
+   208→      return;
+   209→    }
+   210→
+   211→    setSubmitting(true);
+   212→
+   213→    try {
+   214→      const guestId = await addGuest({
+   215→        firstName,
+   216→        lastName,
+   217→        phone,
+   218→        email,
+   219→        idNumber,
+   220→        dateOfBirth,
+   221→        idPhotoUrl: idPhotoUrl || undefined,
+   222→        idType: idType || undefined,
+   223→        idState: idState || undefined,
+   224→      });
+   225→
+   226→      const stayId = await addStay({
+   227→        guestId,
+   228→        roomId: selectedRoomId,
+   229→        checkInDate,
+   230→        checkInTime,
+   231→        checkOutDate,
+   232→        checkOutTime,
+   233→        rateAmount: rate,
+   234→        status: 'active',
+   235→        keyDeposit: 10,
+   236→        tvRemoteDeposit: 10,
+   237→      });
+   238→
+   239→      await addPayment({
+   240→        stayId,
+   241→        amount: rate,
+   242→        method: paymentMethod,
+   243→        description: `Room charge (1 night, ${roomType})`,
+   244→      });
+   245→
+   246→      await addPayment({
+   247→        stayId,
+   248→        amount: 20,
+   249→        method: paymentMethod,
+   250→        description: 'Key + TV remote deposit',
+   251→      });
+   252→
+   253→      updateRoomStatus(selectedRoomId, 'occupied');
+   254→
+   255→      addActivity({
+   256→        guest: `${firstName} ${lastName}`,
+   257→        action: 'Check-in',
+   258→        room: selectedRoom.roomNumber,
+   259→        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+   260→        status: 'Success',
+   261→      });
+   262→
+   263→      // Save signature to Supabase if connected
+   264→      const sigData = idMethod === 'phone-scan' ? scannedSignatureUrl : signatureDataUrl;
+   265→      if (supabase && sigData) {
+   266→        const { error } = await supabase.from('signatures').insert({
+   267→          stay_id: stayId,
+   268→          guest_id: guestId,
+   269→          signature_data_url: sigData,
+   270→        });
+   271→        if (error) console.error('Failed to save signature:', error);
+   272→      }
+   273→
+   274→      setCompletedStayId(stayId);
+   275→      setStep(6);
+   276→      toast.success('Check-in completed successfully!');
+   277→    } catch (err) {
+   278→      console.error('Check-in error:', err);
+   279→      toast.error('Check-in failed. Please try again.');
+   280→    } finally {
+   281→      setSubmitting(false);
+   282→    }
+   283→  };
+   284→
+   285→  const resetForm = () => {
+   286→    setStep(0);
+   287→    setIdMethod(null);
+   288→    setRoomType('1-bed');
+   289→    setSelectedRoomId('');
+   290→    setPaymentMethod('card');
+   291→    setTermsAccepted(false);
+   292→    setFirstName('');
+   293→    setLastName('');
+   294→    setPhone('');
+   295→    setEmail('');
+   296→    setIdNumber('');
+   297→    setIdType('Driver License');
+   298→    setIdState('');
+   299→    setDateOfBirth('');
+   300→    setCheckInDate(new Date().toISOString().split('T')[0]);
+   301→    setCheckOutDate(new Date(Date.now() + 86400000).toISOString().split('T')[0]);
+   302→    setCheckInTime('2:00 PM');
+   303→    setCheckOutTime('10:00 AM');
+   304→    setIdPhotoPreview(null);
+   305→    setIdPhotoUrl('');
+   306→    setSignatureDataUrl('');
+   307→    setScannedImageUrl('');
+   308→    setScannedSignatureUrl('');
+   309→    setScanReceived(false);
+   310→    setCompletedStayId('');
+   311→    setSubmitting(false);
+   312→  };
+   313→
+   314→  return (
+   315→    <div className="p-4 lg:p-6">
+   316→      <div className="mb-6">
+   317→        <h2 className="text-2xl font-bold text-foreground">New Check-In</h2>
+   318→        <p className="text-muted-foreground mt-1">Register a new guest and assign a room.</p>
+   319→      </div>
+   320→
+   321→      {/* Step Indicator */}
+   322→      <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-2">
+   323→        {STEPS.map((label, i) => (
+   324→          <div key={label} className="flex items-center gap-1 min-w-0">
+   325→            <div
+   326→              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+   327→                i === step
+   328→                  ? 'bg-primary text-primary-foreground'
+   329→                  : i < step
+   330→                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+   331→                    : 'bg-muted text-muted-foreground'
+   332→              }`}
+   333→            >
+   334→              {i < step ? (
+   335→                <CheckCircle className="w-3 h-3" />
+   336→              ) : (
+   337→                <span>{i + 1}</span>
+   338→              )}
+   339→              <span className="hidden sm:inline">{label}</span>
+   340→            </div>
+   341→            {i < STEPS.length - 1 && (
+   342→              <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
+   343→            )}
+   344→          </div>
+   345→        ))}
+   346→      </div>
+   347→
+   348→      {/* Step Content */}
+   349→      <div className="max-w-2xl">
+   350→
+   351→        {/* ── Step 0: Room Selection ── */}
+   352→        {step === 0 && (
+   353→          <Card>
+   354→            <CardHeader>
+   355→              <CardTitle className="text-lg">Select Room Type</CardTitle>
+   356→            </CardHeader>
+   357→            <CardContent className="space-y-4">
+   358→              <div className="grid grid-cols-2 gap-4">
+   359→                <button
+   360→                  onClick={() => { setRoomType('1-bed'); setSelectedRoomId(''); }}
+   361→                  className={`p-4 rounded-lg border-2 transition-all cursor-pointer text-left ${
+   362→                    roomType === '1-bed'
+   363→                      ? 'border-primary bg-primary/5'
+   364→                      : 'border-border hover:border-primary/40'
+   365→                  }`}
+   366→                >
+   367→                  <BedSingle className="w-8 h-8 mb-2 text-muted-foreground" />
+   368→                  <p className="font-semibold">1-Bed King</p>
+   369→                  <p className="text-sm text-muted-foreground">$65/night</p>
+   370→                </button>
+   371→                <button
+   372→                  onClick={() => { setRoomType('2-bed'); setSelectedRoomId(''); }}
+   373→                  className={`p-4 rounded-lg border-2 transition-all cursor-pointer text-left ${
+   374→                    roomType === '2-bed'
+   375→                      ? 'border-primary bg-primary/5'
+   376→                      : 'border-border hover:border-primary/40'
+   377→                  }`}
+   378→                >
+   379→                  <BedDouble className="w-8 h-8 mb-2 text-muted-foreground" />
+   380→                  <p className="font-semibold">2-Bed Queen</p>
+   381→                  <p className="text-sm text-muted-foreground">$85/night</p>
+   382→                </button>
+   383→              </div>
+   384→
+   385→              <div>
+   386→                <Label className="mb-2 block">Available Rooms</Label>
+   387→                <Select value={selectedRoomId} onValueChange={setSelectedRoomId}>
+   388→                  <SelectTrigger>
+   389→                    <SelectValue placeholder={`${availableRooms.length} rooms available`} />
+   390→                  </SelectTrigger>
+   391→                  <SelectContent>
+   392→                    {availableRooms.map((r) => (
+   393→                      <SelectItem key={r.id} value={r.id}>
+   394→                        Room {r.roomNumber} — Floor {r.floor} (${r.rate}/night)
+   395→                      </SelectItem>
+   396→                    ))}
+   397→                  </SelectContent>
+   398→                </Select>
+   399→              </div>
+   400→            </CardContent>
+   401→          </Card>
+   402→        )}
+   403→
+   404→        {/* ── Step 1: ID Method Choice ── */}
+   405→        {step === 1 && (
+   406→          <Card>
+   407→            <CardHeader>
+   408→              <CardTitle className="text-lg">How will you verify the guest&apos;s ID?</CardTitle>
+   409→            </CardHeader>
+   410→            <CardContent className="space-y-4">
+   411→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   412→                {/* Manual Entry */}
+   413→                <button
+   414→                  onClick={() => setIdMethod('manual')}
+   415→                  className={`p-6 rounded-lg border-2 transition-all cursor-pointer text-left space-y-3 ${
+   416→                    idMethod === 'manual'
+   417→                      ? 'border-primary bg-primary/5'
+   418→                      : 'border-border hover:border-primary/40'
+   419→                  }`}
+   420→                >
+   421→                  <div className="flex items-center gap-3">
+   422→                    <Keyboard className="w-8 h-8 text-muted-foreground" />
+   423→                    <span className="font-semibold text-lg">Manual Entry</span>
+   424→                  </div>
+   425→                  <p className="text-sm text-muted-foreground">
+   426→                    Type in ID details and upload a photo of the ID from this computer.
+   427→                  </p>
+   428→                  {idMethod === 'manual' && (
+   429→                    <Badge className="bg-primary text-primary-foreground">Selected</Badge>
+   430→                  )}
+   431→                </button>
+   432→
+   433→                {/* Phone Scan */}
+   434→                <button
+   435→                  onClick={() => setIdMethod('phone-scan')}
+   436→                  className={`p-6 rounded-lg border-2 transition-all cursor-pointer text-left space-y-3 ${
+   437→                    idMethod === 'phone-scan'
+   438→                      ? 'border-primary bg-primary/5'
+   439→                      : 'border-border hover:border-primary/40'
+   440→                  }`}
+   441→                >
+   442→                  <div className="flex items-center gap-3">
+   443→                    <Smartphone className="w-8 h-8 text-muted-foreground" />
+   444→                    <span className="font-semibold text-lg">Phone Scan</span>
+   445→                  </div>
+   446→                  <p className="text-sm text-muted-foreground">
+   447→                    Show a QR code to the guest. They scan it with their phone camera to upload their ID photo and sign.
+   448→                  </p>
+   449→                  {idMethod === 'phone-scan' && (
+   450→                    <Badge className="bg-primary text-primary-foreground">Selected</Badge>
+   451→                  )}
+   452→                </button>
+   453→              </div>
+   454→            </CardContent>
+   455→          </Card>
+   456→        )}
+   457→
+   458→        {/* ── Step 2: Guest Details ── */}
+   459→        {step === 2 && (
+   460→          <Card>
+   461→            <CardHeader>
+   462→              <CardTitle className="text-lg">Guest Details</CardTitle>
+   463→            </CardHeader>
+   464→            <CardContent className="space-y-4">
+   465→              <div className="grid grid-cols-2 gap-4">
+   466→                <div>
+   467→                  <Label htmlFor="firstName" className="mb-1.5 block">First Name *</Label>
+   468→                  <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="John" />
+   469→                </div>
+   470→                <div>
+   471→                  <Label htmlFor="lastName" className="mb-1.5 block">Last Name *</Label>
+   472→                  <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Doe" />
+   473→                </div>
+   474→              </div>
+   475→              <div>
+   476→                <Label htmlFor="phone" className="mb-1.5 block">Phone *</Label>
+   477→                <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(720) 555-0100" />
+   478→              </div>
+   479→              <div>
+   480→                <Label htmlFor="email" className="mb-1.5 block">Email</Label>
+   481→                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="guest@email.com" />
+   482→              </div>
+   483→              <div className="grid grid-cols-2 gap-4">
+   484→                <div>
+   485→                  <Label className="mb-1.5 block">Check-in Date</Label>
+   486→                  <Input type="date" value={checkInDate} onChange={(e) => setCheckInDate(e.target.value)} />
+   487→                </div>
+   488→                <div>
+   489→                  <Label className="mb-1.5 block">Check-in Time</Label>
+   490→                  <Select value={checkInTime} onValueChange={setCheckInTime}>
+   491→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   492→                    <SelectContent>
+   493→                      {['12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'].map((t) => (
+   494→                        <SelectItem key={t} value={t}>{t}</SelectItem>
+   495→                      ))}
+   496→                    </SelectContent>
+   497→                  </Select>
+   498→                </div>
+   499→              </div>
+   500→              <div className="grid grid-cols-2 gap-4">
+   501→                <div>
+   502→                  <Label className="mb-1.5 block">Check-out Date</Label>
+   503→                  <Input type="date" value={checkOutDate} onChange={(e) => setCheckOutDate(e.target.value)} />
+   504→                </div>
+   505→                <div>
+   506→                  <Label className="mb-1.5 block">Check-out Time</Label>
+   507→                  <Select value={checkOutTime} onValueChange={setCheckOutTime}>
+   508→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   509→                    <SelectContent>
+   510→                      {['10:00 AM', '11:00 AM', '12:00 PM'].map((t) => (
+   511→                        <SelectItem key={t} value={t}>{t}</SelectItem>
+   512→                      ))}
+   513→                    </SelectContent>
+   514→                  </Select>
+   515→                </div>
+   516→              </div>
+   517→            </CardContent>
+   518→          </Card>
+   519→        )}
+   520→
+   521→        {/* ── Step 3: ID Info / Scan ── */}
+   522→        {step === 3 && idMethod === 'manual' && (
+   523→          <Card>
+   524→            <CardHeader>
+   525→              <CardTitle className="text-lg flex items-center gap-2">
+   526→                <Keyboard className="w-5 h-5" /> Manual ID Entry
+   527→              </CardTitle>
+   528→            </CardHeader>
+   529→            <CardContent className="space-y-4">
+   530→              <div className="grid grid-cols-2 gap-4">
+   531→                <div>
+   532→                  <Label className="mb-1.5 block">ID Type</Label>
+   533→                  <Select value={idType} onValueChange={setIdType}>
+   534→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   535→                    <SelectContent>
+   536→                      <SelectItem value="Driver License">Driver License</SelectItem>
+   537→                      <SelectItem value="State ID">State ID</SelectItem>
+   538→                      <SelectItem value="Passport">Passport</SelectItem>
+   539→                      <SelectItem value="Military ID">Military ID</SelectItem>
+   540→                    </SelectContent>
+   541→                  </Select>
+   542→                </div>
+   543→                <div>
+   544→                  <Label className="mb-1.5 block">ID State</Label>
+   545→                  <Input value={idState} onChange={(e) => setIdState(e.target.value)} placeholder="CO" />
+   546→                </div>
+   547→              </div>
+   548→              <div>
+   549→                <Label htmlFor="idNumber" className="mb-1.5 block">ID Number *</Label>
+   550→                <Input id="idNumber" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="DL-123456" />
+   551→              </div>
+   552→              <div>
+   553→                <Label htmlFor="dob" className="mb-1.5 block">Date of Birth *</Label>
+   554→                <Input id="dob" type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
+   555→              </div>
+   556→
+   557→              {/* File Upload */}
+   558→              <div>
+   559→                <Label className="mb-1.5 block">Upload ID Photo</Label>
+   560→                <input
+   561→                  ref={fileInputRef}
+   562→                  type="file"
+   563→                  accept="image/*"
+   564→                  capture="environment"
+   565→                  onChange={handleFileUpload}
+   566→                  className="hidden"
+   567→                />
+   568→                {idPhotoPreview ? (
+   569→                  <div className="relative rounded-lg overflow-hidden border border-border">
+   570→                    <img src={idPhotoPreview} alt="ID Preview" className="w-full max-h-48 object-contain bg-muted/30" />
+   571→                    <button
+   572→                      onClick={() => { setIdPhotoPreview(null); setIdPhotoUrl(''); }}
+   573→                      className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+   574→                    >
+   575→                      <X className="w-4 h-4" />
+   576→                    </button>
+   577→                  </div>
+   578→                ) : (
+   579→                  <button
+   580→                    onClick={() => fileInputRef.current?.click()}
+   581→                    className="w-full p-8 border-2 border-dashed border-border rounded-lg flex flex-col items-center gap-2 text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors cursor-pointer"
+   582→                  >
+   583→                    <Upload className="w-8 h-8" />
+   584→                    <span className="text-sm font-medium">Click to upload ID photo</span>
+   585→                    <span className="text-xs">JPG, PNG — or take a photo</span>
+   586→                  </button>
+   587→                )}
+   588→              </div>
+   589→            </CardContent>
+   590→          </Card>
+   591→        )}
+   592→
+   593→        {step === 3 && idMethod === 'phone-scan' && (
+   594→          <Card>
+   595→            <CardHeader>
+   596→              <CardTitle className="text-lg flex items-center gap-2">
+   597→                <QrCode className="w-5 h-5" /> Phone Scan — QR Code
+   598→              </CardTitle>
+   599→            </CardHeader>
+   600→            <CardContent className="space-y-5">
+   601→              <p className="text-sm text-muted-foreground">
+   602→                Show this QR code to the guest. They scan it with their phone to take a photo of their ID and sign the agreement.
+   603→              </p>
+   604→
+   605→              {/* QR Code */}
+   606→              <div className="flex justify-center">
+   607→                <div className="bg-white p-4 rounded-xl">
+   608→                  <QRCodeSVG
+   609→                    value={scanUrl}
+   610→                    size={220}
+   611→                    level="M"
+   612→                    includeMargin={false}
+   613→                  />
+   614→                </div>
+   615→              </div>
+   616→
+   617→              <p className="text-xs text-center text-muted-foreground break-all">
+   618→                {scanUrl}
+   619→              </p>
+   620→
+   621→              <Separator />
+   622→
+   623→              {/* Status */}
+   624→              {scanReceived ? (
+   625→                <div className="space-y-3">
+   626→                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+   627→                    <CheckCheck className="w-5 h-5" />
+   628→                    <span className="font-semibold">ID scan received from phone!</span>
+   629→                  </div>
+   630→
+   631→                  {scannedImageUrl && (
+   632→                    <div className="rounded-lg overflow-hidden border border-border">
+   633→                      <p className="text-xs font-medium text-muted-foreground px-3 pt-2">Scanned ID Photo:</p>
+   634→                      <img
+   635→                        src={scannedImageUrl}
+   636→                        alt="Scanned ID"
+   637→                        className="w-full max-h-48 object-contain bg-muted/30 p-2"
+   638→                      />
+   639→                    </div>
+   640→                  )}
+   641→
+   642→                  {scannedSignatureUrl && (
+   643→                    <div className="rounded-lg overflow-hidden border border-border">
+   644→                      <p className="text-xs font-medium text-muted-foreground px-3 pt-2">Guest Signature:</p>
+   645→                      <img
+   646→                        src={scannedSignatureUrl}
+   647→                        alt="Guest Signature"
+   648→                        className="w-full max-h-24 object-contain bg-white p-2"
+   649→                      />
+   650→                    </div>
+   651→                  )}
+   652→                </div>
+   653→              ) : (
+   654→                <div className="text-center py-4">
+   655→                  <Loader2 className="w-6 h-6 text-muted-foreground animate-spin mx-auto mb-3" />
+   656→                  <p className="text-sm text-muted-foreground animate-pulse">Waiting for guest to scan and upload...</p>
+   657→                  <p className="text-xs text-muted-foreground mt-1">The ID photo and signature will appear here automatically.</p>
+   658→                </div>
+   659→              )}
+   660→            </CardContent>
+   661→          </Card>
+   662→        )}
+   663→
+   664→        {/* ── Step 4: Payment ── */}
+   665→        {step === 4 && (
+   666→          <Card>
+   667→            <CardHeader>
+   668→              <CardTitle className="text-lg">Payment Method</CardTitle>
+   669→            </CardHeader>
+   670→            <CardContent className="space-y-4">
+   671→              <div className="grid grid-cols-3 gap-3">
+   672→                {([
+   673→                  { value: 'card' as PaymentMethod, icon: CreditCard, label: 'Credit Card' },
+   674→                  { value: 'debit' as PaymentMethod, icon: Wallet, label: 'Debit Card' },
+   675→                  { value: 'cash' as PaymentMethod, icon: Banknote, label: 'Cash' },
+   676→                ]).map(({ value, icon: Icon, label }) => (
+   677→                  <button
+   678→                    key={value}
+   679→                    onClick={() => setPaymentMethod(value)}
+   680→                    className={`p-4 rounded-lg border-2 transition-all cursor-pointer flex flex-col items-center gap-2 ${
+   681→                      paymentMethod === value
+   682→                        ? 'border-primary bg-primary/5'
+   683→                        : 'border-border hover:border-primary/40'
+   684→                    }`}
+   685→                  >
+   686→                    <Icon className="w-6 h-6 text-muted-foreground" />
+   687→                    <span className="text-sm font-medium">{label}</span>
+   688→                  </button>
+   689→                ))}
+   690→              </div>
+   691→
+   692→              <Separator />
+   693→
+   694→              <div className="space-y-2">
+   695→                <div className="flex justify-between text-sm">
+   696→                  <span>Room ({roomType === '1-bed' ? '1-Bed King' : '2-Bed Queen'})</span>
+   697→                  <span className="font-medium">${rate}</span>
+   698→                </div>
+   699→                <div className="flex justify-between text-sm">
+   700→                  <span>Key Deposit</span>
+   701→                  <span className="font-medium">$10</span>
+   702→                </div>
+   703→                <div className="flex justify-between text-sm">
+   704→                  <span>TV Remote Deposit</span>
+   705→                  <span className="font-medium">$10</span>
+   706→                </div>
+   707→                <Separator />
+   708→                <div className="flex justify-between text-base font-semibold">
+   709→                  <span>Total Due</span>
+   710→                  <span>${rate + 20}</span>
+   711→                </div>
+   712→              </div>
+   713→            </CardContent>
+   714→          </Card>
+   715→        )}
+   716→
+   717→        {/* ── Step 5: Terms & Signature ── */}
+   718→        {step === 5 && (
+   719→          <Card>
+   720→            <CardHeader>
+   721→              <CardTitle className="text-lg">Terms & Signature</CardTitle>
+   722→            </CardHeader>
+   723→            <CardContent className="space-y-4">
+   724→              <div className="bg-muted/30 rounded-lg p-4 text-xs text-muted-foreground space-y-2 max-h-48 overflow-y-auto">
+   725→                <p className="font-semibold text-foreground text-sm mb-2">Airway Motel — Terms and Conditions</p>
+   726→                <p>By signing below, as a guest of AIRWAY MOTEL you state that you have fully read the statements below and agree to abide by them.</p>
+   727→                <ol className="list-decimal list-inside space-y-1.5 mt-2">
+   728→                  <li>Checkout time is 10 AM on date of checkout.</li>
+   729→                  <li>A fee of $10 per hour will be assessed for each hour past checkout time.</li>
+   730→                  <li>Deposits for key and T.V. remote will not be returned unless each is returned in serviceable condition.</li>
+   731→                  <li>Guests may request refund of room rent and deposits within five (5) minutes of check-in if room unsatisfactory.</li>
+   732→                  <li>No illicit drug activity, solicitation, illegal weapon possession, or dangerous activities tolerated.</li>
+   733→                  <li>Management reserves the right to evict any guest at any time without refund for policy violations.</li>
+   734→                  <li>Management reserves the right to enter any room at any time for inspection or repairs.</li>
+   735→                  <li>Airway Motel assumes no responsibility for lost, stolen, or damaged personal items.</li>
+   736→                </ol>
+   737→              </div>
+   738→
+   739→              <div className="flex items-start gap-3">
+   740→                <Checkbox
+   741→                  id="terms"
+   742→                  checked={termsAccepted}
+   743→                  onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+   744→                />
+   745→                <Label htmlFor="terms" className="text-sm leading-relaxed cursor-pointer">
+   746→                  I have read and agree to the terms and conditions above.
+   747→                </Label>
+   748→              </div>
+   749→
+   750→              {/* Signature — different for each method */}
+   751→              {idMethod === 'phone-scan' ? (
+   752→                <div>
+   753→                  {scannedSignatureUrl ? (
+   754→                    <div className="border border-border rounded-lg p-3 bg-white">
+   755→                      <p className="text-xs font-medium text-muted-foreground mb-2">Signature captured from phone:</p>
+   756→                      <img
+   757→                        src={scannedSignatureUrl}
+   758→                        alt="Guest Signature"
+   759→                        className="max-h-24 object-contain mix-blend-multiply"
+   760→                      />
+   761→                    </div>
+   762→                  ) : (
+   763→                    <div className="border border-dashed border-border rounded-lg p-6 text-center text-muted-foreground">
+   764→                      <p className="text-sm">Waiting for signature from phone...</p>
+   765→                    </div>
+   766→                  )}
+   767→                </div>
+   768→              ) : (
+   769→                <div>
+   770→                  <div className="flex justify-between items-end mb-2">
+   771→                    <Label className="text-xs font-medium">Guest Signature *</Label>
+   772→                    <button
+   773→                      type="button"
+   774→                      onClick={() => { sigCanvas.current?.clear(); setSignatureDataUrl(''); }}
+   775→                      className="text-xs text-destructive font-medium hover:underline"
+   776→                    >
+   777→                      Clear
+   778→                    </button>
+   779→                  </div>
+   780→                  <div
+   781→                    className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden"
+   782→                    style={{
+   783→                      backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
+   784→                      backgroundSize: '100% 20px',
+   785→                    }}
+   786→                  >
+   787→                    <SignatureCanvas
+   788→                      ref={sigCanvas}
+   789→                      canvasProps={{ className: 'w-full h-full absolute inset-0 cursor-crosshair' }}
+   790→                      penColor="#0f172a"
+   791→                      onEnd={() => {
+   792→                        if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
+   793→                          setSignatureDataUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
+   794→                        }
+   795→                      }}
+   796→                    />
+   797→                  </div>
+   798→                </div>
+   799→              )}
+   800→            </CardContent>
+   801→          </Card>
+   802→        )}
+   803→
+   804→        {/* ── Step 6: Confirmation ── */}
+   805→        {step === 6 && (
+   806→          <Card>
+   807→            <CardContent className="py-10 text-center">
+   808→              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mx-auto mb-4">
+   809→                <CheckCircle className="w-8 h-8" />
+   810→              </div>
+   811→              <h3 className="text-xl font-bold mb-2">Check-in Complete!</h3>
+   812→              <p className="text-muted-foreground mb-1">
+   813→                Room <span className="font-semibold">{selectedRoom?.roomNumber}</span> has been assigned to{' '}
+   814→                <span className="font-semibold">{firstName} {lastName}</span>.
+   815→              </p>
+   816→              <p className="text-sm text-muted-foreground mb-6">
+   817→                Stay ID: {completedStayId}
+   818→              </p>
+   819→
+   820→              <div className="bg-muted/30 rounded-lg p-4 text-sm space-y-1 text-left max-w-xs mx-auto mb-6">
+   821→                <div className="flex justify-between">
+   822→                  <span className="text-muted-foreground">Room</span>
+   823→                  <span className="font-medium">{selectedRoom?.roomNumber}</span>
+   824→                </div>
+   825→                <div className="flex justify-between">
+   826→                  <span className="text-muted-foreground">Check-in</span>
+   827→                  <span className="font-medium">{checkInDate}, {checkInTime}</span>
+   828→                </div>
+   829→                <div className="flex justify-between">
+   830→                  <span className="text-muted-foreground">Check-out</span>
+   831→                  <span className="font-medium">{checkOutDate}, {checkOutTime}</span>
+   832→                </div>
+   833→                <Separator className="my-2" />
+   834→                <div className="flex justify-between font-semibold">
+   835→                  <span>Total Paid</span>
+   836→                  <span>${rate + 20}</span>
+   837→                </div>
+   838→              </div>
+   839→
+   840→              {idPhotoUrl && (
+   841→                <div className="mb-4 max-w-xs mx-auto">
+   842→                  <p className="text-xs text-muted-foreground mb-1">ID Photo on File:</p>
+   843→                  <img src={idPhotoUrl} alt="ID on file" className="w-full max-h-32 object-contain rounded border border-border bg-muted/20" />
+   844→                </div>
+   845→              )}
+   846→
+   847→              <div className="flex gap-3 justify-center">
+   848→                <Button variant="outline" onClick={resetForm}>
+   849→                  New Check-In
+   850→                </Button>
+   851→                <Button onClick={() => setActiveTab('dashboard')}>
+   852→                  Go to Dashboard
+   853→                </Button>
+   854→              </div>
+   855→            </CardContent>
+   856→          </Card>
+   857→        )}
+   858→
+   859→        {/* Navigation Buttons */}
+   860→        {step < 6 && (
+   861→          <div className="flex justify-between mt-4">
+   862→            <Button
+   863→              variant="outline"
+   864→              onClick={handleBack}
+   865→              disabled={step === 0}
+   866→            >
+   867→              <ArrowLeft className="w-4 h-4 mr-1" />
+   868→              Back
+   869→            </Button>
+   870→            <Button
+   871→              onClick={step === 5 ? handleSubmit : handleNext}
+   872→              disabled={!canNext() || submitting}
+   873→            >
+   874→              {submitting ? (
+   875→                <>
+   876→                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+   877→                  Processing...
+   878→                </>
+   879→              ) : (
+   880→                <>
+   881→                  {step === 5 ? 'Complete Check-In' : 'Continue'}
+   882→                  <ArrowRight className="w-4 h-4 ml-1" />
+   883→                </>
+   884→              )}
+   885→            </Button>
+   886→          </div>
+   887→        )}
+   888→      </div>
+   889→    </div>
+   890→  );
+   891→}
+   892→

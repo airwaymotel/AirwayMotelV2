@@ -391,7 +391,7 @@ export default function CheckIn() {
                   <SelectContent>
                     {availableRooms.map((r) => (
                       <SelectItem key={r.id} value={r.id}>
-                        Room {r.roomNumber} — Floor {r.floor} (${r.rate}/night)
+                        Room {r.roomNumber} (${r.rate}/night)
                       </SelectItem>
                     ))}
                   </SelectContent>

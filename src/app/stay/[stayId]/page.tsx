@@ -82,7 +82,6 @@ export default function StayDetailsPage() {
             const room: Room = {
               id: r.id as string,
               roomNumber: (r.room_number as string) || '',
-              floor: (r.floor as number) || 1,
               type: (r.type as Room['type']) || '1-bed',
               rate: r.type === '2-bed' ? 85 : 65,
               status: (r.status as Room['status']) || 'available',

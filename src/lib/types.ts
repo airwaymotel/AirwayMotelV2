@@ -6,7 +6,6 @@ export type PaymentMethod = 'cash' | 'card' | 'debit';
 export interface Room {
   id: string;
   roomNumber: string;
-  floor: number;
   type: RoomType;
   rate: number;
   status: RoomStatus;

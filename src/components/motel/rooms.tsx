@@ -50,7 +50,7 @@ export default function Rooms() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newRoomNumber, setNewRoomNumber] = useState('');
   const [newRoomType, setNewRoomType] = useState<RoomType>('1-bed');
-  const [newRoomFloor, setNewRoomFloor] = useState('1');
+
   const [newRoomStatus, setNewRoomStatus] = useState<RoomStatus>('available');
   const [adding, setAdding] = useState(false);
 
@@ -58,7 +58,7 @@ export default function Rooms() {
   const [editing, setEditing] = useState(false);
   const [editRoomNumber, setEditRoomNumber] = useState('');
   const [editRoomType, setEditRoomType] = useState<RoomType>('1-bed');
-  const [editRoomFloor, setEditRoomFloor] = useState('1');
+
 
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -109,7 +109,6 @@ export default function Rooms() {
       await addRoom({
         roomNumber: newRoomNumber.trim(),
         type: newRoomType,
-        floor: parseInt(newRoomFloor) || 1,
         rate,
         status: newRoomStatus,
       });
@@ -117,7 +116,6 @@ export default function Rooms() {
       setShowAddDialog(false);
       setNewRoomNumber('');
       setNewRoomType('1-bed');
-      setNewRoomFloor('1');
       setNewRoomStatus('available');
     } catch (err) {
       toast.error('Failed to add room');
@@ -160,7 +158,7 @@ export default function Rooms() {
       updates.type = editRoomType;
       updates.rate = editRoomType === '1-bed' ? 65 : 85;
     }
-    if (parseInt(editRoomFloor) !== selectedRoom.floor) updates.floor = parseInt(editRoomFloor) || 1;
+
 
     if (Object.keys(updates).length > 0) {
       updateRoom(selectedRoom.id, updates);
@@ -174,7 +172,7 @@ export default function Rooms() {
     if (!selectedRoom) return;
     setEditRoomNumber(selectedRoom.roomNumber);
     setEditRoomType(selectedRoom.type);
-    setEditRoomFloor(String(selectedRoom.floor));
+
     setEditing(true);
   };
 
@@ -262,7 +260,7 @@ export default function Rooms() {
             <DialogTitle>Add New Room</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
+            <div>
               <div className="space-y-2">
                 <Label htmlFor="room-number" className="text-xs">Room Number *</Label>
                 <Input
@@ -270,16 +268,6 @@ export default function Rooms() {
                   placeholder="e.g. 15"
                   value={newRoomNumber}
                   onChange={(e) => setNewRoomNumber(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="room-floor" className="text-xs">Floor</Label>
-                <Input
-                  id="room-floor"
-                  type="number"
-                  min="1"
-                  value={newRoomFloor}
-                  onChange={(e) => setNewRoomFloor(e.target.value)}
                 />
               </div>
             </div>
@@ -369,21 +357,15 @@ export default function Rooms() {
                       <Label className="text-xs">Room Number</Label>
                       <Input value={editRoomNumber} onChange={(e) => setEditRoomNumber(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-xs">Type</Label>
-                        <Select value={editRoomType} onValueChange={(v) => setEditRoomType(v as RoomType)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="1-bed">1-Bed King ($65)</SelectItem>
-                            <SelectItem value="2-bed">2-Bed Queen ($85)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs">Floor</Label>
-                        <Input type="number" min="1" value={editRoomFloor} onChange={(e) => setEditRoomFloor(e.target.value)} />
-                      </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Type</Label>
+                      <Select value={editRoomType} onValueChange={(v) => setEditRoomType(v as RoomType)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1-bed">1-Bed King ($65)</SelectItem>
+                          <SelectItem value="2-bed">2-Bed Queen ($85)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
@@ -415,10 +397,6 @@ export default function Rooms() {
                         <div>
                           <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Rate</p>
                           <p className="text-sm font-medium">${selectedRoom.rate}/night</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Floor</p>
-                          <p className="text-sm font-medium">{selectedRoom.floor}</p>
                         </div>
                         <div>
                           <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Status</p>
@@ -599,10 +577,6 @@ export default function Rooms() {
                             <div>
                               <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Rate</p>
                               <p className="text-sm font-medium">${selectedRoom.rate}/night</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Floor</p>
-                              <p className="text-sm font-medium">{selectedRoom.floor}</p>
                             </div>
                             <div>
                               <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1.5">Status</p>

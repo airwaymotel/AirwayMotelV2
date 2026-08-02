@@ -24,7 +24,6 @@ function mapRoomFromDb(row: Record<string, unknown>): Room {
   return {
     id: row.id as string,
     roomNumber: row.room_number as string,
-    floor: row.floor as number,
     type: row.type as Room['type'],
     rate: row.type === '2-bed' ? 85 : 65,
     status: row.status as Room['status'],
@@ -78,18 +77,18 @@ function mapPaymentFromDb(row: Record<string, unknown>): Payment {
 // ── Mock Data ────────────────────────────────────────────────────
 
 const MOCK_ROOMS: Room[] = [
-  { id: 'room-101', roomNumber: '101', floor: 1, type: '1-bed', rate: 65, status: 'occupied' },
-  { id: 'room-102', roomNumber: '102', floor: 1, type: '1-bed', rate: 65, status: 'available' },
-  { id: 'room-103', roomNumber: '103', floor: 1, type: '2-bed', rate: 85, status: 'occupied' },
-  { id: 'room-104', roomNumber: '104', floor: 1, type: '1-bed', rate: 65, status: 'cleaning' },
-  { id: 'room-105', roomNumber: '105', floor: 1, type: '2-bed', rate: 85, status: 'available' },
-  { id: 'room-201', roomNumber: '201', floor: 2, type: '1-bed', rate: 65, status: 'occupied' },
-  { id: 'room-202', roomNumber: '202', floor: 2, type: '2-bed', rate: 85, status: 'maintenance' },
-  { id: 'room-203', roomNumber: '203', floor: 2, type: '1-bed', rate: 65, status: 'available' },
-  { id: 'room-204', roomNumber: '204', floor: 2, type: '2-bed', rate: 85, status: 'reserved' },
-  { id: 'room-205', roomNumber: '205', floor: 2, type: '1-bed', rate: 65, status: 'available' },
-  { id: 'room-301', roomNumber: '301', floor: 3, type: '2-bed', rate: 85, status: 'occupied' },
-  { id: 'room-302', roomNumber: '302', floor: 3, type: '1-bed', rate: 65, status: 'available' },
+  { id: 'room-101', roomNumber: '101', type: '1-bed', rate: 65, status: 'occupied' },
+  { id: 'room-102', roomNumber: '102', type: '1-bed', rate: 65, status: 'available' },
+  { id: 'room-103', roomNumber: '103', type: '2-bed', rate: 85, status: 'occupied' },
+  { id: 'room-104', roomNumber: '104', type: '1-bed', rate: 65, status: 'cleaning' },
+  { id: 'room-105', roomNumber: '105', type: '2-bed', rate: 85, status: 'available' },
+  { id: 'room-106', roomNumber: '106', type: '1-bed', rate: 65, status: 'available' },
+  { id: 'room-107', roomNumber: '107', type: '2-bed', rate: 85, status: 'maintenance' },
+  { id: 'room-108', roomNumber: '108', type: '1-bed', rate: 65, status: 'available' },
+  { id: 'room-109', roomNumber: '109', type: '2-bed', rate: 85, status: 'reserved' },
+  { id: 'room-110', roomNumber: '110', type: '1-bed', rate: 65, status: 'available' },
+  { id: 'room-111', roomNumber: '111', type: '2-bed', rate: 85, status: 'occupied' },
+  { id: 'room-112', roomNumber: '112', type: '1-bed', rate: 65, status: 'available' },
 ];
 
 const MOCK_GUESTS: Guest[] = [
@@ -261,13 +260,12 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
       const result = await postToApi<{ id: string }>('/api/rooms', {
         room_number: roomData.roomNumber,
         type: roomData.type,
-        floor: roomData.floor,
         status: roomData.status,
       });
 
       if (result?.id) {
         set((state) => ({
-          rooms: [...state.rooms, { ...roomData, id: result.id }].sort((a, b) => a.floor - b.floor || a.roomNumber.localeCompare(b.roomNumber)),
+          rooms: [...state.rooms, { ...roomData, id: result.id }].sort((a, b) => a.roomNumber.localeCompare(b.roomNumber)),
         }));
         return result.id;
       }
@@ -276,7 +274,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
     // Fallback: generate a local ID
     const id = generateId();
     set((state) => ({
-      rooms: [...state.rooms, { ...roomData, id }].sort((a, b) => a.floor - b.floor || a.roomNumber.localeCompare(b.roomNumber)),
+      rooms: [...state.rooms, { ...roomData, id }].sort((a, b) => a.roomNumber.localeCompare(b.roomNumber)),
     }));
     return id;
   },
@@ -302,7 +300,6 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
       const snakeUpdates: Record<string, unknown> = {};
       if (updates.roomNumber !== undefined) snakeUpdates.room_number = updates.roomNumber;
       if (updates.type !== undefined) snakeUpdates.type = updates.type;
-      if (updates.floor !== undefined) snakeUpdates.floor = updates.floor;
       if (updates.status !== undefined) snakeUpdates.status = updates.status;
       patchApi('/api/rooms', { id: roomId, ...snakeUpdates });
     }

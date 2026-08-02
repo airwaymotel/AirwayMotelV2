@@ -7,7 +7,6 @@ export async function GET() {
   const { data, error } = await supabase
     .from('rooms')
     .select('*')
-    .order('floor', { ascending: true })
     .order('room_number', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
