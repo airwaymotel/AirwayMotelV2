@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, User, Phone, Mail, Calendar, BedSingle, BedDouble,
   Shield, CreditCard, Banknote, Wallet, ImageIcon, PenLine,
-  CheckCircle, Clock, AlertTriangle, Loader2,
+  CheckCircle, Clock, AlertTriangle, Loader2, Printer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -227,9 +227,19 @@ export default function StayDetailsPage() {
             </div>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-xs text-muted-foreground">Stay ID</p>
-          <p className="text-xs font-mono text-muted-foreground">{stay.id}</p>
+        <div className="flex flex-col items-end gap-2 text-right">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(`/stay/${stay.id}/print`, '_blank')}
+            className="hidden sm:flex"
+          >
+            <Printer className="w-4 h-4 mr-2" /> Print Registration Form
+          </Button>
+          <div>
+            <p className="text-xs text-muted-foreground">Stay ID</p>
+            <p className="text-xs font-mono text-muted-foreground">{stay.id}</p>
+          </div>
         </div>
       </div>
 
