@@ -113,82 +113,49 @@ export default function MobileScanPage() {
     await startCamera();
   }, [startCamera]);
 
-  // ── ID-Scan Only: Upload just the photo and broadcast ──
+  // ── ID-Scan Only: Upload just the photo via API ──
   const submitIdScan = useCallback(async () => {
     if (!imageSrc || !sessionId) return;
     setIsUploading(true);
     setUploadError('');
 
     try {
-      let imageUrl = '';
+      // Upload the image to the scan-session API (works without Supabase)
+      const res = await fetch('/api/scan-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'upload',
+          sessionId,
+          imageBase64: imageSrc,
+        }),
+      });
 
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to upload photo');
+      }
+
+      console.log('[Scan] ID photo uploaded successfully via API');
+
+      // Also try Supabase Realtime broadcast if available (for full check-in flow)
       if (supabase) {
-        // Upload to Supabase Storage
-        const res = await fetch(imageSrc);
-        const blob = await res.blob();
-        const fileName = `id_${sessionId}_${Date.now()}.jpg`;
-
-        console.log('[Scan] Uploading ID photo to Supabase Storage...');
-
-        const { error: uploadError } = await supabase.storage
-          .from('ids')
-          .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
-
-        if (uploadError) {
-          console.error('[Scan] Storage upload error:', uploadError);
-          // Retry once
-          const fileName2 = `id_${sessionId}_${Date.now()}_retry.jpg`;
-          const { error: retryError } = await supabase.storage
+        try {
+          // Upload to Supabase Storage for the record
+          const blobRes = await fetch(imageSrc);
+          const blob = await blobRes.blob();
+          const fileName = `id_${sessionId}_${Date.now()}.jpg`;
+          const { error: uploadError } = await supabase.storage
             .from('ids')
-            .upload(fileName2, blob, { contentType: 'image/jpeg', upsert: false });
+            .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
 
-          if (retryError) {
-            throw new Error(`Storage upload failed: ${retryError.message}`);
+          if (!uploadError) {
+            const { data } = supabase.storage.from('ids').getPublicUrl(fileName);
+            console.log('[Scan] Also stored in Supabase:', data.publicUrl);
           }
-
-          const { data: retryData } = supabase.storage.from('ids').getPublicUrl(fileName2);
-          imageUrl = retryData.publicUrl;
-        } else {
-          const { data } = supabase.storage.from('ids').getPublicUrl(fileName);
-          imageUrl = data.publicUrl;
+        } catch {
+          // Non-critical — the API upload already succeeded
         }
-
-        console.log('[Scan] ID photo uploaded. URL:', imageUrl);
-
-        // Broadcast to admin dashboard via Realtime
-        console.log('[Scan] Broadcasting via Realtime on channel:', `scan_${sessionId}`);
-
-        const channel = supabase.channel(`scan_${sessionId}`, {
-          config: { broadcast: { self: true } },
-        });
-
-        await new Promise<void>((resolve) => {
-          channel.subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-              resolve();
-            }
-          });
-        });
-
-        const sendResult = await channel.send({
-          type: 'broadcast',
-          event: 'id_scanned',
-          payload: {
-            imageUrl,
-            timestamp: Date.now(),
-          },
-        });
-
-        console.log('[Scan] Broadcast send result:', sendResult);
-
-        // Keep channel open briefly to ensure delivery
-        await new Promise((r) => setTimeout(r, 2000));
-        supabase.removeChannel(channel);
-      } else {
-        console.error('[Scan] No Supabase client available!');
-        setUploadError('Not connected to Supabase. Please check your configuration.');
-        setIsUploading(false);
-        return;
       }
 
       setStep('success');

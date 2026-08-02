@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -380,82 +379,92 @@ function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData
 
 // ── Phone QR Code Scanner Component ────────────────────────────────
 // Shows a QR code — user scans with phone, takes photo on phone, image comes back to computer.
+// Uses polling-based API (no Supabase required).
 
 function PhoneQrScanner({ onImageReceived }: { onImageReceived: (dataUrl: string) => void }) {
   const [sessionId, setSessionId] = useState<string>('');
   const [scanUrl, setScanUrl] = useState<string>('');
   const [status, setStatus] = useState<'generating' | 'waiting' | 'received' | 'error'>('generating');
   const [errorMsg, setErrorMsg] = useState('');
-  const channelRef = useRef<any>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Generate session and set up Realtime listener
+  // Generate session and start polling
   useEffect(() => {
-    const id = crypto.randomUUID();
-    setSessionId(id);
+    let cancelled = false;
 
-    // Build the URL for the phone to open
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const url = `${origin}/scan/${id}?mode=id-scan`;
-    setScanUrl(url);
-    setStatus('waiting');
+    const init = async () => {
+      const id = crypto.randomUUID();
 
-    // If Supabase is available, listen for the broadcast from the phone
-    if (supabase) {
-      const channel = supabase.channel(`scan_${id}`, {
-        config: { broadcast: { self: true } },
-      });
+      // Create the session on the server
+      try {
+        const res = await fetch('/api/scan-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create', sessionId: id }),
+        });
 
-      channel.on('broadcast', { event: 'id_scanned' }, (payload: any) => {
-        console.log('[IdScanner] Received id_scanned broadcast:', payload);
-        const imageUrl = payload?.imageUrl;
-        if (imageUrl) {
-          setStatus('received');
-          // Fetch the image and convert to data URL
-          fetchImageAsDataUrl(imageUrl).then((dataUrl) => {
-            if (dataUrl) {
-              onImageReceived(dataUrl);
-            } else {
-              // If we can't fetch as data URL, use the URL directly
-              onImageReceived(imageUrl);
-            }
-          });
+        if (!res.ok) {
+          throw new Error('Failed to create scan session');
         }
-      });
+      } catch (err: any) {
+        if (!cancelled) {
+          setStatus('error');
+          setErrorMsg(err?.message || 'Failed to create scan session. Please try again.');
+        }
+        return;
+      }
 
-      channel.subscribe((status: string) => {
-        console.log('[IdScanner] Channel status:', status);
-      });
+      if (cancelled) return;
 
-      channelRef.current = channel;
+      setSessionId(id);
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    } else {
-      setStatus('error');
-      setErrorMsg('Supabase is not configured. QR code scanning requires a server connection.');
-    }
+      // Build the URL for the phone to open
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const url = `${origin}/scan/${id}?mode=id-scan`;
+      setScanUrl(url);
+      setStatus('waiting');
+
+      // Start polling for the result
+      pollingRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/scan-session?sessionId=${id}`);
+          if (!res.ok) return;
+
+          const data = await res.json();
+
+          if (data.status === 'received' && data.imageBase64) {
+            // Stop polling
+            if (pollingRef.current) {
+              clearInterval(pollingRef.current);
+              pollingRef.current = null;
+            }
+
+            if (!cancelled) {
+              setStatus('received');
+              onImageReceived(data.imageBase64);
+            }
+          }
+        } catch {
+          // Ignore polling errors, just retry
+        }
+      }, 2000); // Poll every 2 seconds
+    };
+
+    init();
+
+    return () => {
+      cancelled = true;
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
   }, [onImageReceived]);
 
-  // Helper: fetch an image URL and convert to data URL
-  const fetchImageAsDataUrl = async (url: string): Promise<string | null> => {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      return null;
-    }
-  };
-
   const handleCancel = () => {
-    if (channelRef.current && supabase) {
-      supabase.removeChannel(channelRef.current);
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
     }
     setStatus('generating');
   };
@@ -466,9 +475,9 @@ function PhoneQrScanner({ onImageReceived }: { onImageReceived: (dataUrl: string
         <div className="text-center p-6 bg-red-50 dark:bg-red-900/20 rounded-lg">
           <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-3" />
           <p className="text-sm text-red-600 dark:text-red-400 mb-2">{errorMsg}</p>
-          <p className="text-xs text-muted-foreground">
-            Connect to Supabase to use the QR code scanning feature, or use the Upload option instead.
-          </p>
+          <Button variant="outline" size="sm" onClick={() => { setStatus('generating'); setErrorMsg(''); }}>
+            <RotateCcw className="w-4 h-4 mr-1" /> Try Again
+          </Button>
         </div>
       </div>
     );
