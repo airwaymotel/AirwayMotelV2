@@ -71,6 +71,15 @@ export default function MobileScanPage() {
     }
   }, []);
 
+  // ── Barcode mode: stop the html5-qrcode scanner ──
+  const stopBarcodeScanner = useCallback(() => {
+    if (html5QrRef.current) {
+      html5QrRef.current.stop().catch(() => {});
+      html5QrRef.current.clear().catch(() => {});
+      html5QrRef.current = null;
+    }
+  }, []);
+
   // ── Photo mode: start the back camera ──
   const startCamera = useCallback(async () => {
     setCamStatus(CAM_STATUS.REQUESTING);
@@ -155,14 +164,6 @@ export default function MobileScanPage() {
     }
   }, [startCamera, isBarcodeMode]);
 
-  // ── Barcode mode: html5-qrcode → parseAAMVA ──
-  const stopBarcodeScanner = useCallback(() => {
-    if (html5QrRef.current) {
-      html5QrRef.current.stop().catch(() => {});
-      html5QrRef.current.clear().catch(() => {});
-      html5QrRef.current = null;
-    }
-  }, []);
 
   const startBarcodeScanner = useCallback(async () => {
     if (!barcodeContainerRef.current) return;
