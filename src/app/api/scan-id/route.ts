@@ -28,7 +28,9 @@ export async function POST(request: Request) {
       base64Data = dataUriMatch[2];
     }
 
-    const prompt = `You are an ID card scanner. Extract all information from this US ID card (driver's license or state ID). Return ONLY valid JSON with these exact fields. If a field is not found, use an empty string.
+    const prompt = `You are an ID card scanner. Extract ALL readable information from this government-issued ID card. It could be a US driver's license, US state ID, passport (US or foreign), national ID card from any country, military ID, permanent resident card, or any other official identification document.
+
+Return ONLY valid JSON with these exact fields. If a field is not found on the document, use an empty string "" — never invent data.
 
 {
   "firstName": "",
@@ -44,7 +46,7 @@ export async function POST(request: Request) {
     "zipCode": ""
   },
   "idNumber": "",
-  "idType": "Driver License or State ID or Passport",
+  "idType": "",
   "issuingState": "",
   "expirationDate": "",
   "issueDate": "",
@@ -58,12 +60,13 @@ export async function POST(request: Request) {
 }
 
 Important rules:
-- Parse the full name into separate first/middle/last name fields
-- Date format must be YYYY-MM-DD
-- If you see "IDENTIFICATION CARD" it's a State ID, not a Driver License
-- Look for the state name or abbreviation to determine issuingState
-- Check for veteran designation, organ donor, and REAL ID star
-- Return ONLY the JSON object, no additional text, no markdown, no explanation`;
+- Parse the full name into separate first/middle/last name fields. Some IDs show the full name on one line — split it intelligently.
+- Date format must be YYYY-MM-DD. Convert DD/MM/YYYY, DD-MMM-YYYY, or any other format to YYYY-MM-DD.
+- For idType, use a descriptive label: "Driver License", "State ID", "Passport", "Military ID", "Permanent Resident Card", "National ID", or whatever the document actually is.
+- For issuingState, use the country name if not a US state (e.g. "Mexico", "Canada", "Colombia").
+- If a field like eyeColor, hairColor, height, weight, expirationDate, issueDate, veteran, organDonor, or realId is simply not printed on the document, leave it as empty string or false — that is fine.
+- Some IDs have address in a single line — split it into street/city/state/zipCode as best you can.
+- Return ONLY the JSON object, no additional text, no markdown, no explanation.`;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
