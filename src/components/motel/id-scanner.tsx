@@ -423,6 +423,7 @@ function VisionScanner({
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        console.error('[VisionScanner] API Error Details:', err);
         throw new Error(err.error || 'Failed to process ID image');
       }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const GEMINI_MODEL = 'gemini-3.5-flash';
+const GEMINI_MODEL = 'gemini-1.5-flash';
 
 export async function POST(request: Request) {
   try {
@@ -22,7 +22,9 @@ export async function POST(request: Request) {
     // Parse data URI if present (e.g. "data:image/jpeg;base64,...")
     let mimeType = 'image/jpeg';
     let base64Data = imageBase64;
-    const dataUriMatch = imageBase64.match(/^data:([^;,]+);base64,(.+)$/s);
+    // Strip newlines just in case and match without the /s flag to fix TS error
+    const cleanBase64 = imageBase64.replace(/\n/g, '');
+    const dataUriMatch = cleanBase64.match(/^data:([^;,]+);base64,(.+)$/);
     if (dataUriMatch) {
       mimeType = dataUriMatch[1];
       base64Data = dataUriMatch[2];
@@ -92,7 +94,7 @@ Important rules:
       const errorText = await geminiResponse.text();
       console.error('[Scan-ID] Gemini API error:', geminiResponse.status, errorText);
       return NextResponse.json(
-        { error: 'The AI vision service returned an error. Please try again.' },
+        { error: 'The AI vision service returned an error. Please try again.', details: errorText, status: geminiResponse.status },
         { status: 502 }
       );
     }
