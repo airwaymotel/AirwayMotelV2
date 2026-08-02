@@ -6,6 +6,7 @@ import { Search, Sun, Moon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useMotelStore } from '@/lib/store';
 import Sidebar, { MobileNav } from '@/components/motel/sidebar';
+import AuthGuard from '@/components/auth-guard';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,43 +27,45 @@ export default function StayLayout({ children }: { children: React.ReactNode }) 
   const toggleTheme = () => setTheme(isDark ? 'light' : 'dark');
 
   if (pathname.endsWith('/print')) {
-    return <>{children}</>;
+    return <AuthGuard>{children}</AuthGuard>;
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <div className="flex flex-1">
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+    <AuthGuard>
+      <div className="min-h-screen flex flex-col bg-background">
+        <div className="flex flex-1">
+          <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
-        <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 bg-card border-b border-border flex justify-between items-center px-4 lg:px-6 shrink-0">
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="md:hidden shrink-0">
-                <span className="text-sm font-bold text-foreground">Airway</span>
-                <span className="text-sm font-bold text-amber-600 ml-1">Motel</span>
+          <div className="flex-1 flex flex-col min-w-0">
+            <header className="h-14 bg-card border-b border-border flex justify-between items-center px-4 lg:px-6 shrink-0">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="md:hidden shrink-0">
+                  <span className="text-sm font-bold text-foreground">Airway</span>
+                  <span className="text-sm font-bold text-amber-600 ml-1">Motel</span>
+                </div>
+                <Badge variant="outline" className="text-xs shrink-0">Stay Details</Badge>
               </div>
-              <Badge variant="outline" className="text-xs shrink-0">Stay Details</Badge>
-            </div>
 
-            <div className="flex items-center gap-3 shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleTheme}
-                className="h-8 w-8 text-muted-foreground"
-              >
-                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              </Button>
-            </div>
-          </header>
+              <div className="flex items-center gap-3 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  className="h-8 w-8 text-muted-foreground"
+                >
+                  {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </Button>
+              </div>
+            </header>
 
-          <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-            {children}
-          </main>
+            <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
 
-      <MobileNav activeTab={activeTab} onTabChange={setActiveTab} />
-    </div>
+        <MobileNav activeTab={activeTab} onTabChange={setActiveTab} />
+      </div>
+    </AuthGuard>
   );
 }

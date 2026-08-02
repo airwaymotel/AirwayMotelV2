@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   PlusSquare,
@@ -24,6 +25,13 @@ const navItems: { icon: typeof LayoutDashboard; label: string; tab: NavTab }[] =
 ];
 
 export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+  const router = useRouter();
+
+  const handleLogout = () => {
+    localStorage.removeItem('airway_auth');
+    router.push('/login');
+  };
+
   return (
     <aside className="hidden md:flex md:w-56 lg:w-64 flex-col bg-card border-r border-border h-full">
       {/* Brand */}
@@ -79,8 +87,13 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-border">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Admin Terminal</p>
-        <p className="text-[11px] text-muted-foreground font-mono mt-1">v1.0 &middot; &cir; live</p>
+        <button 
+          onClick={handleLogout}
+          className="flex items-center gap-3 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-md transition-colors"
+        >
+          <LogOut className="w-4 h-4 shrink-0" />
+          Logout
+        </button>
       </div>
     </aside>
   );
@@ -88,6 +101,13 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
 // Mobile bottom navigation
 export function MobileNav({ activeTab, onTabChange }: SidebarProps) {
+  const router = useRouter();
+
+  const handleLogout = () => {
+    localStorage.removeItem('airway_auth');
+    router.push('/login');
+  };
+
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 flex justify-around items-center h-14 safe-area-bottom">
       {navItems.map((item) => {
