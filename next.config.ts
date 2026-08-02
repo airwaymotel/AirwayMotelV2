@@ -1,9 +1,13 @@
 import type { NextConfig } from "next";
 
-const isNetlify = process.env.NETLIFY === "true";
+// Vercel and Netlify each install their own Next.js runtime, so the
+// standalone output (used only for the local bun/Caddy server) must be
+// turned off in build clouds.
+const isCloudBuild =
+  process.env.VERCEL === "true" || process.env.NETLIFY === "true";
 
 const nextConfig: NextConfig = {
-  ...(isNetlify ? {} : { output: "standalone" as const }),
+  ...(isCloudBuild ? {} : { output: "standalone" as const }),
   /* config options here */
   typescript: {
     ignoreBuildErrors: true,
