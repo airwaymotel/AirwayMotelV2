@@ -1,8 +1,34 @@
 import { NextResponse } from 'next/server';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = 'gemini-3.5-flash';
 
-const ID_SCAN_PROMPT = `You are an ID card scanner. Extract all information from this US ID card (driver's license or state ID). Return ONLY valid JSON with these exact fields. If a field is not found, use an empty string.
+export async function POST(request: Request) {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'GEMINI_API_KEY is not configured. Add it to your .env file.' },
+        { status: 500 }
+      );
+    }
+
+    const { imageBase64 } = await request.json();
+
+    if (!imageBase64) {
+      return NextResponse.json({ error: 'No image data provided' }, { status: 400 });
+    }
+
+    // Parse data URI if present (e.g. "data:image/jpeg;base64,...")
+    let mimeType = 'image/jpeg';
+    let base64Data = imageBase64;
+    const dataUriMatch = imageBase64.match(/^data:([^;,]+);base64,(.+)$/s);
+    if (dataUriMatch) {
+      mimeType = dataUriMatch[1];
+      base64Data = dataUriMatch[2];
+    }
+
+    const prompt = `You are an ID card scanner. Extract all information from this US ID card (driver's license or state ID). Return ONLY valid JSON with these exact fields. If a field is not found, use an empty string.
 
 {
   "firstName": "",
@@ -39,43 +65,40 @@ Important rules:
 - Check for veteran designation, organ donor, and REAL ID star
 - Return ONLY the JSON object, no additional text, no markdown, no explanation`;
 
-export async function POST(request: Request) {
-  try {
-    const { imageBase64 } = await request.json();
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-    if (!imageBase64) {
-      return NextResponse.json({ error: 'No image data provided' }, { status: 400 });
-    }
-
-    // Use Google Gemini API for vision
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
-    // Extract base64 data and mime type from data URL
-    let mimeType = 'image/jpeg';
-    let base64Data = imageBase64;
-
-    if (imageBase64.startsWith('data:')) {
-      const matches = imageBase64.match(/^data:(.+?);base64,(.+)$/);
-      if (matches) {
-        mimeType = matches[1];
-        base64Data = matches[2];
-      }
-    }
-
-    const result = await model.generateContent([
-      { text: ID_SCAN_PROMPT },
-      {
-        inlineData: {
-          mimeType,
-          data: base64Data,
+    const geminiResponse = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64Data } },
+            ],
+          },
+        ],
+        generationConfig: {
+          response_mime_type: 'application/json',
         },
-      },
-    ]);
+      }),
+    });
 
-    const content = result.response.text();
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      console.error('[Scan-ID] Gemini API error:', geminiResponse.status, errorText);
+      return NextResponse.json(
+        { error: 'The AI vision service returned an error. Please try again.' },
+        { status: 502 }
+      );
+    }
+
+    const geminiData = await geminiResponse.json();
+    const content =
+      geminiData?.candidates?.[0]?.content?.parts
+        ?.map((part: { text?: string }) => part.text || '')
+        .join('') || '';
 
     if (!content) {
       return NextResponse.json({ error: 'No response from vision model' }, { status: 500 });
@@ -84,25 +107,33 @@ export async function POST(request: Request) {
     console.log('[Scan-ID] Raw model response (first 500 chars):', content.substring(0, 500));
 
     // Try to parse the JSON from the response with multiple strategies
+    const tryParse = (candidate: string) => {
+      try {
+        return JSON.parse(candidate);
+      } catch {}
+      // Models sometimes emit trailing commas (e.g. "false," before "}")
+      // which strict JSON.parse rejects but lenient parsers accept.
+      try {
+        return JSON.parse(candidate.replace(/,\s*([}\]])/g, '$1'));
+      } catch {}
+      return null;
+    };
+
     let parsedData = null;
 
-    // Strategy 1: Direct parse
-    try {
-      parsedData = JSON.parse(content);
-    } catch {}
+    // Strategy 1: Direct parse (model returned clean JSON)
+    parsedData = tryParse(content);
 
-    // Strategy 2: Strip markdown code blocks
+    // Strategy 2: Strip markdown code blocks and try again
     if (!parsedData) {
       const stripped = content
         .replace(/```(?:json)?\s*/gi, '')
         .replace(/```\s*/g, '')
         .trim();
-      try {
-        parsedData = JSON.parse(stripped);
-      } catch {}
+      parsedData = tryParse(stripped);
     }
 
-    // Strategy 3: Balanced brace matching
+    // Strategy 3: Find JSON object using balanced brace matching
     if (!parsedData) {
       const firstBrace = content.indexOf('{');
       if (firstBrace !== -1) {
@@ -112,22 +143,23 @@ export async function POST(request: Request) {
           if (content[i] === '{') depth++;
           if (content[i] === '}') {
             depth--;
-            if (depth === 0) { lastBrace = i; break; }
+            if (depth === 0) {
+              lastBrace = i;
+              break;
+            }
           }
         }
         if (lastBrace !== -1) {
-          try {
-            parsedData = JSON.parse(content.substring(firstBrace, lastBrace + 1));
-          } catch {}
+          parsedData = tryParse(content.substring(firstBrace, lastBrace + 1));
         }
       }
     }
 
-    // Strategy 4: Greedy regex
+    // Strategy 4: Greedy regex as last resort
     if (!parsedData) {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        try { parsedData = JSON.parse(jsonMatch[0]); } catch {}
+        parsedData = tryParse(jsonMatch[0]);
       }
     }
 
@@ -139,7 +171,7 @@ export async function POST(request: Request) {
       }, { status: 422 });
     }
 
-    // Normalize the data
+    // Ensure the parsed data has the expected structure
     const normalizedData = {
       firstName: parsedData.firstName || '',
       middleName: parsedData.middleName || '',

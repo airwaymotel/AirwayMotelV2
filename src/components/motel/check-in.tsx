@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useCallback } from 'react';
 import {
   BedSingle, BedDouble, ArrowRight, ArrowLeft, CheckCircle,
   CreditCard, Banknote, Wallet, PenLine, Upload,
-  Camera, Loader2, X, ImageIcon, ScanLine,
+  Camera, Loader2, X, ImageIcon, ScanLine, DoorOpen,
 } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -80,6 +80,9 @@ export default function CheckIn() {
   // Signature
   const sigCanvas = useRef<SignatureCanvas>(null);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string>('');
+  // True when the signature + terms came from the guest's phone — we render it
+  // as a static image until the admin clears it to re-sign on the pad.
+  const [signatureFromPhone, setSignatureFromPhone] = useState(false);
 
   const [completedStayId, setCompletedStayId] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -156,6 +159,16 @@ export default function CheckIn() {
 
     setIdScanned(true);
     toast.success('ID data extracted — please review and add contact info');
+  }, []);
+
+  // ── Signature received from the phone flow ──
+  // Auto-fills Step 4 (terms + signature) but keeps the step visible so the
+  // admin can verify or clear & re-sign.
+  const handleSignatureReceived = useCallback((sigDataUrl: string, termsAccepted: boolean) => {
+    setSignatureDataUrl(sigDataUrl);
+    setSignatureFromPhone(true);
+    if (termsAccepted) setTermsAccepted(true);
+    toast.success('Guest signed on phone — review on the Terms & Sign step');
   }, []);
 
   // ── Step validation ──
@@ -290,6 +303,7 @@ export default function CheckIn() {
     setIdPhotoPreview(null);
     setIdPhotoUrl('');
     setSignatureDataUrl('');
+    setSignatureFromPhone(false);
     setScannedIdImage(undefined);
     setIdScanned(false);
     setCompletedStayId('');
@@ -368,19 +382,46 @@ export default function CheckIn() {
               </div>
 
               <div>
-                <Label className="mb-2 block">Available Rooms</Label>
-                <Select value={selectedRoomId} onValueChange={setSelectedRoomId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={`${availableRooms.length} rooms available`} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableRooms.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        Room {r.roomNumber} (${r.rate}/night)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="mb-2 block">
+                  Available Rooms{' '}
+                  <span className="text-muted-foreground font-normal">
+                    ({availableRooms.length} {availableRooms.length === 1 ? 'room' : 'rooms'})
+                  </span>
+                </Label>
+                {availableRooms.length === 0 ? (
+                  <div className="rounded-lg border-2 border-dashed border-border p-6 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      No {roomType === '1-bed' ? '1-Bed King' : '2-Bed Queen'} rooms available right now.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {availableRooms.map((r) => {
+                      const selected = r.id === selectedRoomId;
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setSelectedRoomId(r.id)}
+                          className={`relative p-4 rounded-lg border-2 transition-all cursor-pointer flex flex-col items-center gap-2 ${
+                            selected
+                              ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                              : 'border-border hover:border-primary/40 hover:bg-muted/30'
+                          }`}
+                        >
+                          {selected && (
+                            <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                            </span>
+                          )}
+                          <DoorOpen className={`w-6 h-6 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
+                          <p className="font-bold text-lg leading-none">{r.roomNumber}</p>
+                          <p className="text-[11px] text-muted-foreground">${r.rate}/night</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -391,6 +432,7 @@ export default function CheckIn() {
           <div className="space-y-4">
             <IdScanner
               onScanComplete={handleScanComplete}
+              onSignatureReceived={handleSignatureReceived}
             />
 
             {/* Manual ID entry fallback (always visible) */}
@@ -677,30 +719,58 @@ export default function CheckIn() {
                   <Label className="text-xs font-medium">Guest Signature *</Label>
                   <button
                     type="button"
-                    onClick={() => { sigCanvas.current?.clear(); setSignatureDataUrl(''); }}
+                    onClick={() => {
+                      sigCanvas.current?.clear();
+                      setSignatureDataUrl('');
+                      setSignatureFromPhone(false);
+                    }}
                     className="text-xs text-destructive font-medium hover:underline"
                   >
                     Clear
                   </button>
                 </div>
-                <div
-                  className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden"
-                  style={{
-                    backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
-                    backgroundSize: '100% 20px',
-                  }}
-                >
-                  <SignatureCanvas
-                    ref={sigCanvas}
-                    canvasProps={{ className: 'w-full h-full absolute inset-0 cursor-crosshair' }}
-                    penColor="#0f172a"
-                    onEnd={() => {
-                      if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
-                        setSignatureDataUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
-                      }
+                {signatureFromPhone && signatureDataUrl ? (
+                  <>
+                    <div
+                      className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden flex items-center justify-center"
+                      style={{
+                        backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
+                        backgroundSize: '100% 20px',
+                      }}
+                    >
+                      <img
+                        src={signatureDataUrl}
+                        alt="Guest signature from phone"
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                      <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                      <p className="text-[11px] text-green-700 dark:text-green-300">
+                        Signed on guest&apos;s phone. Tap <strong>Clear</strong> if you need to re-sign here.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div
+                    className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden"
+                    style={{
+                      backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
+                      backgroundSize: '100% 20px',
                     }}
-                  />
-                </div>
+                  >
+                    <SignatureCanvas
+                      ref={sigCanvas}
+                      canvasProps={{ className: 'w-full h-full absolute inset-0 cursor-crosshair' }}
+                      penColor="#0f172a"
+                      onEnd={() => {
+                        if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
+                          setSignatureDataUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
+                        }
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

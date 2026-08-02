@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Bell, Sun, Moon, Database } from 'lucide-react';
+import { Search, Sun, Moon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useMotelStore } from '@/lib/store';
 import Sidebar, { MobileNav } from '@/components/motel/sidebar';
@@ -115,16 +115,6 @@ export default function Home() {
                 title={isDark ? 'Switch to day desk' : 'Switch to night desk'}
               >
                 {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              </Button>
-
-              {/* Notifications */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground relative"
-              >
-                <Bell className="w-4 h-4" />
-                <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full" />
               </Button>
 
               {/* Admin */}

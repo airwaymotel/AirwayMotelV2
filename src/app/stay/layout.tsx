@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Search, Bell, Sun, Moon } from 'lucide-react';
+import { Search, Sun, Moon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useMotelStore } from '@/lib/store';
 import Sidebar, { MobileNav } from '@/components/motel/sidebar';
@@ -46,10 +46,6 @@ export default function StayLayout({ children }: { children: React.ReactNode }) 
                 className="h-8 w-8 text-muted-foreground"
               >
                 {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground relative">
-                <Bell className="w-4 h-4" />
-                <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full" />
               </Button>
             </div>
           </header>
