@@ -3,13 +3,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Camera, ScanLine, Upload, Loader2, CheckCircle, AlertCircle,
-  X, RotateCcw, Image, SwitchCamera, ArrowLeft, Zap,
+  X, RotateCcw, SwitchCamera, ArrowLeft, Zap, Smartphone, QrCode,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -81,7 +83,7 @@ function parseAAMVA(rawText: string): ScannedIdData | null {
 
     const lines = rawText.split(/\n|\r/).map(l => l.trim()).filter(Boolean);
 
-    // Extract issuer ID from header (e.g., ANSI 636000 → state code 06 = CA)
+    // Extract issuer ID from header
     const headerMatch = rawText.match(/ANSI\s*(\d{6})/);
     if (headerMatch) {
       const issuerId = headerMatch[1].substring(0, 2);
@@ -104,7 +106,6 @@ function parseAAMVA(rawText: string): ScannedIdData | null {
 
     // Parse each line for AAMVA elements
     for (const line of lines) {
-      // DAA - Full Name (Last, First Middle)
       const daaMatch = line.match(/^DAA(.+)/);
       if (daaMatch) {
         const nameParts = daaMatch[1].split(',').map(s => s.trim());
@@ -116,24 +117,14 @@ function parseAAMVA(rawText: string): ScannedIdData | null {
         }
         result.fullName = `${result.firstName} ${result.middleName} ${result.lastName}`.replace(/\s+/g, ' ').trim();
       }
-
-      // DAC - First Name
       const dacMatch = line.match(/^DAC(.+)/);
       if (dacMatch) result.firstName = dacMatch[1].trim();
-
-      // DAD - Middle Name
       const dadMatch = line.match(/^DAD(.+)/);
       if (dadMatch) result.middleName = dadMatch[1].trim();
-
-      // DCB - Last Name
       const dcbMatch = line.match(/^DCB(.+)/);
       if (dcbMatch) result.lastName = dcbMatch[1].trim();
-
-      // DCS - Last Name
       const dcsMatch = line.match(/^DCS(.+)/);
       if (dcsMatch) result.lastName = dcsMatch[1].trim();
-
-      // DBB - Date of Birth (YYYYMMDD or MMDDYYYY)
       const dbbMatch = line.match(/^DBB(.+)/);
       if (dbbMatch) {
         const dobRaw = dbbMatch[1].trim();
@@ -145,38 +136,23 @@ function parseAAMVA(rawText: string): ScannedIdData | null {
           }
         }
       }
-
-      // DBC - Gender
       const dbcMatch = line.match(/^DBC(.+)/);
       if (dbcMatch) {
         const g = dbcMatch[1].trim().toUpperCase();
         result.gender = g === '1' || g === 'M' ? 'Male' : g === '2' || g === 'F' ? 'Female' : g;
       }
-
-      // DAG - Street Address
       const dagMatch = line.match(/^DAG(.+)/);
       if (dagMatch) result.address.street = dagMatch[1].trim();
-
-      // DAI - City
       const daiMatch = line.match(/^DAI(.+)/);
       if (daiMatch) result.address.city = daiMatch[1].trim();
-
-      // DAJ - State
       const dajMatch = line.match(/^DAJ(.+)/);
       if (dajMatch) result.address.state = dajMatch[1].trim();
-
-      // DAK - ZIP + Country
       const dakMatch = line.match(/^DAK(.+)/);
       if (dakMatch) {
-        const zipRaw = dakMatch[1].trim();
-        result.address.zipCode = zipRaw.substring(0, 5);
+        result.address.zipCode = dakMatch[1].trim().substring(0, 5);
       }
-
-      // DAQ - ID Number
       const daqMatch = line.match(/^DAQ(.+)/);
       if (daqMatch) result.idNumber = daqMatch[1].trim();
-
-      // DBA - Expiration Date
       const dbaMatch = line.match(/^DBA(.+)/);
       if (dbaMatch) {
         const expRaw = dbaMatch[1].trim();
@@ -188,8 +164,6 @@ function parseAAMVA(rawText: string): ScannedIdData | null {
           }
         }
       }
-
-      // DBD - Issue Date
       const dbdMatch = line.match(/^DBD(.+)/);
       if (dbdMatch) {
         const issRaw = dbdMatch[1].trim();
@@ -201,8 +175,6 @@ function parseAAMVA(rawText: string): ScannedIdData | null {
           }
         }
       }
-
-      // DAY - Eye Color
       const dayMatch = line.match(/^DAY(.+)/);
       if (dayMatch) {
         const eyeMap: Record<string, string> = {
@@ -211,8 +183,6 @@ function parseAAMVA(rawText: string): ScannedIdData | null {
         };
         result.eyeColor = eyeMap[dayMatch[1].trim().toUpperCase()] || dayMatch[1].trim();
       }
-
-      // DAZ - Hair Color
       const dazMatch = line.match(/^DAZ(.+)/);
       if (dazMatch) {
         const hairMap: Record<string, string> = {
@@ -221,36 +191,24 @@ function parseAAMVA(rawText: string): ScannedIdData | null {
         };
         result.hairColor = hairMap[dazMatch[1].trim().toUpperCase()] || dazMatch[1].trim();
       }
-
-      // DAU - Height
       const dauMatch = line.match(/^DAU(.+)/);
       if (dauMatch) result.height = dauMatch[1].trim();
-
-      // DAW - Weight
       const dawMatch = line.match(/^DAW(.+)/);
       if (dawMatch) result.weight = dawMatch[1].trim();
-
-      // Check for ID type
       if (line.includes('ID') || line.includes('IDENTIFICATION')) {
         result.idType = 'State ID';
       }
     }
 
-    // Build full name if not set from DAA
     if (!result.fullName) {
       result.fullName = `${result.firstName} ${result.middleName} ${result.lastName}`.replace(/\s+/g, ' ').trim();
     }
-
-    // Set issuing state from address state if not found
     if (!result.issuingState && result.address.state) {
       result.issuingState = result.address.state;
     }
-
-    // Check if we got enough data
     if (!result.lastName && !result.firstName && !result.idNumber) {
       return null;
     }
-
     return result;
   } catch {
     return null;
@@ -258,7 +216,6 @@ function parseAAMVA(rawText: string): ScannedIdData | null {
 }
 
 // ── Barcode Scanner Component ──────────────────────────────────────
-// Now with a "Start Scanning" button so the camera doesn't auto-open.
 
 function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData) => void }) {
   const scannerRef = useRef<HTMLDivElement>(null);
@@ -283,48 +240,30 @@ function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData
           qrbox: { width: 280, height: 200 },
           formatsToSupport: [
             // @ts-expect-error - PDF417 format constant
-            0, // QR_CODE
-            // The library auto-detects PDF417
+            0,
           ],
         },
         (decodedText: string) => {
-          // Try to parse as AAMVA
           const parsed = parseAAMVA(decodedText);
           if (parsed) {
             scanner.stop().catch(() => {});
             onScanSuccess(parsed);
           } else {
-            // Even if not AAMVA, the barcode might contain useful data
             if (decodedText.length > 3) {
               const partial: ScannedIdData = {
-                firstName: '',
-                middleName: '',
-                lastName: '',
-                fullName: '',
-                dateOfBirth: '',
-                gender: '',
+                firstName: '', middleName: '', lastName: '', fullName: '',
+                dateOfBirth: '', gender: '',
                 address: { street: '', city: '', state: '', zipCode: '' },
-                idNumber: decodedText,
-                idType: 'State ID',
-                issuingState: '',
-                expirationDate: '',
-                issueDate: '',
-                eyeColor: '',
-                hairColor: '',
-                height: '',
-                weight: '',
-                veteran: false,
-                organDonor: false,
-                realId: false,
+                idNumber: decodedText, idType: 'State ID', issuingState: '',
+                expirationDate: '', issueDate: '', eyeColor: '', hairColor: '',
+                height: '', weight: '', veteran: false, organDonor: false, realId: false,
               };
               scanner.stop().catch(() => {});
               onScanSuccess(partial);
             }
           }
         },
-        () => {
-          // Scan failure - ignore, keep scanning
-        }
+        () => {}
       );
 
       setStatus('scanning');
@@ -344,7 +283,6 @@ function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData
     setStatus('idle');
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (html5QrRef.current) {
@@ -364,7 +302,6 @@ function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData
     setErrorMsg('');
   };
 
-  // ── Idle state: show "Start Scanning" button ──
   if (status === 'idle') {
     return (
       <div className="space-y-4">
@@ -394,7 +331,6 @@ function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData
     <div className="space-y-4">
       <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3]">
         <div id="id-barcode-scanner" ref={scannerRef} className="w-full h-full" />
-
         {status === 'starting' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80">
             <div className="text-center text-white">
@@ -403,7 +339,6 @@ function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData
             </div>
           </div>
         )}
-
         {status === 'scanning' && (
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute inset-4 border-2 border-white/30 rounded-lg">
@@ -419,7 +354,6 @@ function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData
             </div>
           </div>
         )}
-
         {status === 'error' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80">
             <div className="text-center text-white px-4">
@@ -432,14 +366,11 @@ function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData
           </div>
         )}
       </div>
-
-      {/* Stop button while scanning */}
       {status === 'scanning' && (
         <Button variant="outline" size="sm" className="w-full" onClick={stopScanner}>
           <X className="w-4 h-4 mr-2" /> Stop Scanner
         </Button>
       )}
-
       <p className="text-xs text-muted-foreground text-center">
         Position the <strong>PDF417 barcode</strong> on the back of the ID within the frame
       </p>
@@ -447,8 +378,178 @@ function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData
   );
 }
 
+// ── Phone QR Code Scanner Component ────────────────────────────────
+// Shows a QR code — user scans with phone, takes photo on phone, image comes back to computer.
+
+function PhoneQrScanner({ onImageReceived }: { onImageReceived: (dataUrl: string) => void }) {
+  const [sessionId, setSessionId] = useState<string>('');
+  const [scanUrl, setScanUrl] = useState<string>('');
+  const [status, setStatus] = useState<'generating' | 'waiting' | 'received' | 'error'>('generating');
+  const [errorMsg, setErrorMsg] = useState('');
+  const channelRef = useRef<any>(null);
+
+  // Generate session and set up Realtime listener
+  useEffect(() => {
+    const id = crypto.randomUUID();
+    setSessionId(id);
+
+    // Build the URL for the phone to open
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const url = `${origin}/scan/${id}?mode=id-scan`;
+    setScanUrl(url);
+    setStatus('waiting');
+
+    // If Supabase is available, listen for the broadcast from the phone
+    if (supabase) {
+      const channel = supabase.channel(`scan_${id}`, {
+        config: { broadcast: { self: true } },
+      });
+
+      channel.on('broadcast', { event: 'id_scanned' }, (payload: any) => {
+        console.log('[IdScanner] Received id_scanned broadcast:', payload);
+        const imageUrl = payload?.imageUrl;
+        if (imageUrl) {
+          setStatus('received');
+          // Fetch the image and convert to data URL
+          fetchImageAsDataUrl(imageUrl).then((dataUrl) => {
+            if (dataUrl) {
+              onImageReceived(dataUrl);
+            } else {
+              // If we can't fetch as data URL, use the URL directly
+              onImageReceived(imageUrl);
+            }
+          });
+        }
+      });
+
+      channel.subscribe((status: string) => {
+        console.log('[IdScanner] Channel status:', status);
+      });
+
+      channelRef.current = channel;
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } else {
+      setStatus('error');
+      setErrorMsg('Supabase is not configured. QR code scanning requires a server connection.');
+    }
+  }, [onImageReceived]);
+
+  // Helper: fetch an image URL and convert to data URL
+  const fetchImageAsDataUrl = async (url: string): Promise<string | null> => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const handleCancel = () => {
+    if (channelRef.current && supabase) {
+      supabase.removeChannel(channelRef.current);
+    }
+    setStatus('generating');
+  };
+
+  if (status === 'error') {
+    return (
+      <div className="space-y-4">
+        <div className="text-center p-6 bg-red-50 dark:bg-red-900/20 rounded-lg">
+          <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-3" />
+          <p className="text-sm text-red-600 dark:text-red-400 mb-2">{errorMsg}</p>
+          <p className="text-xs text-muted-foreground">
+            Connect to Supabase to use the QR code scanning feature, or use the Upload option instead.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* QR Code */}
+      <div className="flex flex-col items-center gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-md">
+          {scanUrl && (
+            <QRCodeSVG
+              value={scanUrl}
+              size={200}
+              level="M"
+              includeMargin={false}
+              bgColor="#FFFFFF"
+              fgColor="#000000"
+            />
+          )}
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-sm font-medium">Scan with your phone</p>
+          <p className="text-xs text-muted-foreground">
+            Open your phone&apos;s camera and scan this QR code to take a photo of the ID
+          </p>
+        </div>
+      </div>
+
+      {/* Status indicator */}
+      {status === 'waiting' && (
+        <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+          <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse shrink-0" />
+          <div className="flex-1">
+            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Waiting for phone...</p>
+            <p className="text-[11px] text-amber-600/70 dark:text-amber-400/60">
+              Scan the QR code with your phone, then take a photo of the ID
+            </p>
+          </div>
+        </div>
+      )}
+
+      {status === 'received' && (
+        <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+          <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+          <div className="flex-1">
+            <p className="text-xs font-medium text-green-700 dark:text-green-400">Photo received from phone!</p>
+            <p className="text-[11px] text-green-600/70 dark:text-green-400/60">Processing with AI...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel button */}
+      {status === 'waiting' && (
+        <Button variant="outline" size="sm" className="w-full" onClick={handleCancel}>
+          <X className="w-4 h-4 mr-2" /> Cancel
+        </Button>
+      )}
+
+      {/* How it works */}
+      <div className="text-[11px] text-muted-foreground space-y-1.5 px-1">
+        <p className="font-semibold text-foreground/70">How it works:</p>
+        <div className="flex items-start gap-2">
+          <span className="text-amber-500 font-bold">1</span>
+          <span>Scan the QR code with your phone</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-amber-500 font-bold">2</span>
+          <span>Take a clear photo of the front of the ID</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-amber-500 font-bold">3</span>
+          <span>The photo is sent back here automatically</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Camera Viewfinder Component ────────────────────────────────────
-// Live camera feed with a "Capture" button for taking a photo of the ID front.
+// Fallback: live camera feed on the PC with a capture button.
 
 function CameraViewfinder({ onCapture }: { onCapture: (dataUrl: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -461,13 +562,10 @@ function CameraViewfinder({ onCapture }: { onCapture: (dataUrl: string) => void 
   const startCamera = useCallback(async (facing: 'environment' | 'user') => {
     setStatus('starting');
     setErrorMsg('');
-
-    // Stop any existing stream
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -482,11 +580,10 @@ function CameraViewfinder({ onCapture }: { onCapture: (dataUrl: string) => void 
     } catch (err: any) {
       console.error('Camera error:', err);
       setStatus('error');
-      setErrorMsg(err?.message || 'Could not access camera. Please check permissions.');
+      setErrorMsg(err?.message || 'Could not access camera.');
     }
   }, []);
 
-  // Start camera on mount
   useEffect(() => {
     startCamera(facingMode);
     return () => {
@@ -507,13 +604,10 @@ function CameraViewfinder({ onCapture }: { onCapture: (dataUrl: string) => void 
     if (!ctx) return;
     ctx.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-
-    // Stop the camera
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
-
     onCapture(dataUrl);
   };
 
@@ -523,22 +617,11 @@ function CameraViewfinder({ onCapture }: { onCapture: (dataUrl: string) => void 
     startCamera(newFacing);
   };
 
-  const handleRetry = () => {
-    startCamera(facingMode);
-  };
-
   return (
     <div className="space-y-4">
       <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3]">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover"
-        />
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
         <canvas ref={canvasRef} className="hidden" />
-
         {status === 'starting' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80">
             <div className="text-center text-white">
@@ -547,7 +630,6 @@ function CameraViewfinder({ onCapture }: { onCapture: (dataUrl: string) => void 
             </div>
           </div>
         )}
-
         {status === 'ready' && (
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute inset-4 border-2 border-white/30 rounded-lg">
@@ -563,51 +645,37 @@ function CameraViewfinder({ onCapture }: { onCapture: (dataUrl: string) => void 
             </div>
           </div>
         )}
-
         {status === 'error' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80">
             <div className="text-center text-white px-4">
               <AlertCircle className="w-10 h-10 mx-auto mb-2 text-red-400" />
               <p className="text-sm mb-3">{errorMsg}</p>
-              <Button variant="outline" size="sm" onClick={handleRetry}>
+              <Button variant="outline" size="sm" onClick={() => startCamera(facingMode)}>
                 <RotateCcw className="w-4 h-4 mr-1" /> Retry
               </Button>
             </div>
           </div>
         )}
       </div>
-
-      {/* Controls */}
       {status === 'ready' && (
         <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleSwitchCamera}
-            className="shrink-0"
-            title="Switch camera"
-          >
+          <Button variant="outline" size="icon" onClick={handleSwitchCamera} className="shrink-0" title="Switch camera">
             <SwitchCamera className="w-4 h-4" />
           </Button>
           <Button onClick={handleCapture} className="flex-1 gap-2">
-            <Zap className="w-4 h-4" />
-            Capture Photo
+            <Zap className="w-4 h-4" /> Capture Photo
           </Button>
         </div>
       )}
-
-      <p className="text-xs text-muted-foreground text-center">
-        Align the <strong>front of the ID</strong> within the frame, then tap <strong>Capture</strong>
-      </p>
     </div>
   );
 }
 
 // ── Vision Scanner Component ───────────────────────────────────────
-// Now with a live camera viewfinder for "Take Photo" and file upload for "Upload"
+// Three options: Scan QR code (phone), Upload file, or Use PC camera
 
 function VisionScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData, imageBase64: string) => void }) {
-  const [subMode, setSubMode] = useState<'choose' | 'camera' | 'upload'>('choose');
+  const [subMode, setSubMode] = useState<'choose' | 'phone' | 'camera' | 'upload'>('choose');
   const [status, setStatus] = useState<'idle' | 'processing' | 'error'>('idle');
   const [preview, setPreview] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
@@ -619,7 +687,6 @@ function VisionScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData,
     setPreview(dataUrl);
 
     try {
-      // Send to AI Vision API
       const res = await fetch('/api/scan-id', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -648,16 +715,16 @@ function VisionScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData,
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      processImage(dataUrl);
-    };
+    reader.onload = () => processImage(reader.result as string);
     reader.readAsDataURL(file);
   };
 
   const handleCameraCapture = (dataUrl: string) => {
+    processImage(dataUrl);
+  };
+
+  const handlePhoneImage = (dataUrl: string) => {
     processImage(dataUrl);
   };
 
@@ -675,26 +742,64 @@ function VisionScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData,
     setErrorMsg('');
   };
 
-  // ── Choose sub-mode: Camera or Upload ──
+  // ── Choose sub-mode ──
   if (subMode === 'choose' && status === 'idle') {
     return (
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3">
+          {/* Option 1: Scan QR code with phone (primary) */}
           <button
-            onClick={() => setSubMode('camera')}
-            className="p-6 rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer flex flex-col items-center gap-2"
+            onClick={() => setSubMode('phone')}
+            className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
           >
-            <Camera className="w-8 h-8 text-muted-foreground" />
-            <span className="text-sm font-medium">Take Photo</span>
-            <span className="text-xs text-muted-foreground">Use camera</span>
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
+                <QrCode className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-base">Scan with Phone</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Scan a QR code with your phone, take a photo of the ID, and it&apos;s sent back here.
+                </p>
+                <Badge variant="secondary" className="mt-2 text-[10px]">Recommended</Badge>
+              </div>
+            </div>
           </button>
+
+          {/* Option 2: Upload from file */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-6 rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer flex flex-col items-center gap-2"
+            className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
           >
-            <Upload className="w-8 h-8 text-muted-foreground" />
-            <span className="text-sm font-medium">Upload</span>
-            <span className="text-xs text-muted-foreground">From gallery</span>
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center shrink-0">
+                <Upload className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-base">Upload Photo</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Select an existing photo of the ID from your device.
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {/* Option 3: Use PC camera */}
+          <button
+            onClick={() => setSubMode('camera')}
+            className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center shrink-0">
+                <Camera className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-base">Use PC Camera</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Use this computer&apos;s camera to take a photo of the ID.
+                </p>
+              </div>
+            </div>
           </button>
         </div>
         <input
@@ -711,7 +816,23 @@ function VisionScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData,
     );
   }
 
-  // ── Camera mode: live viewfinder ──
+  // ── Phone QR code mode ──
+  if (subMode === 'phone' && status === 'idle') {
+    return (
+      <div className="space-y-3">
+        <button
+          onClick={handleBackToChoose}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to options
+        </button>
+        <PhoneQrScanner onImageReceived={handlePhoneImage} />
+      </div>
+    );
+  }
+
+  // ── Camera mode ──
   if (subMode === 'camera' && status === 'idle') {
     return (
       <div className="space-y-3">
@@ -727,7 +848,7 @@ function VisionScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData,
     );
   }
 
-  // ── Processing state ──
+  // ── Processing ──
   if (status === 'processing' && preview) {
     return (
       <div className="space-y-3">
@@ -745,7 +866,7 @@ function VisionScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData,
     );
   }
 
-  // ── Error state ──
+  // ── Error ──
   if (status === 'error') {
     return (
       <div className="space-y-3">
@@ -809,7 +930,6 @@ export default function IdScanner({ onScanComplete, onClose }: IdScannerProps) {
 
   return (
     <div className="space-y-4">
-      {/* Back button when in a scan mode */}
       {mode !== 'choose' && status === 'idle' && (
         <button
           onClick={handleBackToChoose}
@@ -918,36 +1038,28 @@ export default function IdScanner({ onScanComplete, onClose }: IdScannerProps) {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Name */}
             <div>
               <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Full Name</p>
               <p className="text-sm font-medium">{scannedData.fullName || `${scannedData.firstName} ${scannedData.middleName} ${scannedData.lastName}`.trim()}</p>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
-              {/* ID Number */}
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">ID Number</p>
                 <p className="text-sm font-medium font-mono">{scannedData.idNumber}</p>
               </div>
-              {/* Date of Birth */}
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Date of Birth</p>
                 <p className="text-sm font-medium">{scannedData.dateOfBirth}</p>
               </div>
-              {/* Gender */}
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Gender</p>
                 <p className="text-sm font-medium">{scannedData.gender}</p>
               </div>
-              {/* ID Type & State */}
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">ID Type</p>
                 <p className="text-sm font-medium">{scannedData.idType}{scannedData.issuingState ? ` — ${scannedData.issuingState}` : ''}</p>
               </div>
             </div>
-
-            {/* Address */}
             {scannedData.address.street && (
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Address</p>
@@ -959,8 +1071,6 @@ export default function IdScanner({ onScanComplete, onClose }: IdScannerProps) {
                 </p>
               </div>
             )}
-
-            {/* Physical Details */}
             {(scannedData.eyeColor || scannedData.height || scannedData.weight) && (
               <div className="grid grid-cols-3 gap-3">
                 {scannedData.eyeColor && (
@@ -983,8 +1093,6 @@ export default function IdScanner({ onScanComplete, onClose }: IdScannerProps) {
                 )}
               </div>
             )}
-
-            {/* Dates */}
             <div className="grid grid-cols-2 gap-3">
               {scannedData.expirationDate && (
                 <div>
@@ -999,8 +1107,6 @@ export default function IdScanner({ onScanComplete, onClose }: IdScannerProps) {
                 </div>
               )}
             </div>
-
-            {/* Badges */}
             {(scannedData.veteran || scannedData.organDonor || scannedData.realId) && (
               <div className="flex gap-2 flex-wrap">
                 {scannedData.veteran && <Badge variant="secondary" className="text-[10px]">Veteran</Badge>}
@@ -1008,10 +1114,7 @@ export default function IdScanner({ onScanComplete, onClose }: IdScannerProps) {
                 {scannedData.realId && <Badge variant="secondary" className="text-[10px]">REAL ID</Badge>}
               </div>
             )}
-
             <Separator />
-
-            {/* Actions */}
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={handleReset}>
                 <RotateCcw className="w-4 h-4 mr-2" /> Rescan

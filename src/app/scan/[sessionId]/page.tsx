@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Camera, CheckCircle, RefreshCcw, Loader2, CameraOff, AlertTriangle, Upload, AlertCircle } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
 import { supabase } from '@/lib/supabase';
@@ -31,7 +31,11 @@ type CamStatus = (typeof CAM_STATUS)[keyof typeof CAM_STATUS];
 
 export default function MobileScanPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const sessionId = params.sessionId as string;
+  const mode = searchParams.get('mode'); // 'id-scan' or null (full check-in)
+
+  const isIdScanOnly = mode === 'id-scan';
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -84,11 +88,10 @@ export default function MobileScanPage() {
     return () => stopStream();
   }, [startCamera, stopStream]);
 
-  // Capture photo from video and immediately move to review
+  // Capture photo from video
   const capture = useCallback(() => {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -100,7 +103,6 @@ export default function MobileScanPage() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
     setImageSrc(dataUrl);
-    // Stop the camera stream after capture to freeze the preview
     stopStream();
   }, [stopStream]);
 
@@ -108,10 +110,97 @@ export default function MobileScanPage() {
     setImageSrc(null);
     setStep('camera');
     setUploadError('');
-    // Restart camera
     await startCamera();
   }, [startCamera]);
 
+  // ── ID-Scan Only: Upload just the photo and broadcast ──
+  const submitIdScan = useCallback(async () => {
+    if (!imageSrc || !sessionId) return;
+    setIsUploading(true);
+    setUploadError('');
+
+    try {
+      let imageUrl = '';
+
+      if (supabase) {
+        // Upload to Supabase Storage
+        const res = await fetch(imageSrc);
+        const blob = await res.blob();
+        const fileName = `id_${sessionId}_${Date.now()}.jpg`;
+
+        console.log('[Scan] Uploading ID photo to Supabase Storage...');
+
+        const { error: uploadError } = await supabase.storage
+          .from('ids')
+          .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
+
+        if (uploadError) {
+          console.error('[Scan] Storage upload error:', uploadError);
+          // Retry once
+          const fileName2 = `id_${sessionId}_${Date.now()}_retry.jpg`;
+          const { error: retryError } = await supabase.storage
+            .from('ids')
+            .upload(fileName2, blob, { contentType: 'image/jpeg', upsert: false });
+
+          if (retryError) {
+            throw new Error(`Storage upload failed: ${retryError.message}`);
+          }
+
+          const { data: retryData } = supabase.storage.from('ids').getPublicUrl(fileName2);
+          imageUrl = retryData.publicUrl;
+        } else {
+          const { data } = supabase.storage.from('ids').getPublicUrl(fileName);
+          imageUrl = data.publicUrl;
+        }
+
+        console.log('[Scan] ID photo uploaded. URL:', imageUrl);
+
+        // Broadcast to admin dashboard via Realtime
+        console.log('[Scan] Broadcasting via Realtime on channel:', `scan_${sessionId}`);
+
+        const channel = supabase.channel(`scan_${sessionId}`, {
+          config: { broadcast: { self: true } },
+        });
+
+        await new Promise<void>((resolve) => {
+          channel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              resolve();
+            }
+          });
+        });
+
+        const sendResult = await channel.send({
+          type: 'broadcast',
+          event: 'id_scanned',
+          payload: {
+            imageUrl,
+            timestamp: Date.now(),
+          },
+        });
+
+        console.log('[Scan] Broadcast send result:', sendResult);
+
+        // Keep channel open briefly to ensure delivery
+        await new Promise((r) => setTimeout(r, 2000));
+        supabase.removeChannel(channel);
+      } else {
+        console.error('[Scan] No Supabase client available!');
+        setUploadError('Not connected to Supabase. Please check your configuration.');
+        setIsUploading(false);
+        return;
+      }
+
+      setStep('success');
+    } catch (error) {
+      console.error('[Scan] Submit error:', error);
+      setUploadError(error instanceof Error ? error.message : 'Failed to submit. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [imageSrc, sessionId]);
+
+  // ── Full Check-In: Upload photo + signature and broadcast ──
   const submitAll = async () => {
     if (!imageSrc || !sessionId) return;
     if (sigCanvas.current?.isEmpty()) {
@@ -125,11 +214,9 @@ export default function MobileScanPage() {
     try {
       const signatureDataUrl = sigCanvas.current!.getCanvas().toDataURL('image/png');
 
-      // Upload ID photo to Supabase Storage
       let idPhotoUrl = '';
 
       if (supabase) {
-        // Convert data URL to Blob for upload
         const res = await fetch(imageSrc);
         const blob = await res.blob();
         const fileName = `id_${sessionId}_${Date.now()}.jpg`;
@@ -144,7 +231,6 @@ export default function MobileScanPage() {
           console.error('[Scan] Storage upload error:', uploadError);
           setUploadError(`Upload failed: ${uploadError.message}. Retrying...`);
 
-          // Retry once
           const fileName2 = `id_${sessionId}_${Date.now()}_retry.jpg`;
           const { error: retryError } = await supabase.storage
             .from('ids')
@@ -163,14 +249,12 @@ export default function MobileScanPage() {
 
         console.log('[Scan] ID photo uploaded. URL:', idPhotoUrl);
 
-        // Send data via Supabase Realtime broadcast to the admin dashboard
         console.log('[Scan] Sending data via Realtime broadcast on channel:', `scan_${sessionId}`);
 
         const channel = supabase.channel(`scan_${sessionId}`, {
           config: { broadcast: { self: true } },
         });
 
-        // Subscribe first, then send
         await new Promise<void>((resolve) => {
           channel.subscribe((status) => {
             if (status === 'SUBSCRIBED') {
@@ -191,7 +275,6 @@ export default function MobileScanPage() {
 
         console.log('[Scan] Broadcast send result:', sendResult);
 
-        // Keep channel open briefly to ensure message delivery
         await new Promise((r) => setTimeout(r, 2000));
         supabase.removeChannel(channel);
 
@@ -229,18 +312,21 @@ export default function MobileScanPage() {
       <header className="bg-zinc-900 p-4 text-center border-b border-zinc-800 z-20 shrink-0">
         <h1 className="text-lg font-bold text-amber-500">Airway Motel</h1>
         <p className="text-xs text-zinc-400">
-          {step === 'camera' && !imageSrc && 'Guest ID Scanner'}
-          {step === 'camera' && imageSrc && 'Review Photo'}
-          {step === 'signature' && 'Check-In Agreement'}
-          {step === 'success' && 'Success'}
+          {isIdScanOnly ? (
+            step === 'camera' && !imageSrc ? 'ID Scanner' : step === 'camera' && imageSrc ? 'Review Photo' : 'Success'
+          ) : (
+            step === 'camera' && !imageSrc && 'Guest ID Scanner' ||
+            step === 'camera' && imageSrc && 'Review Photo' ||
+            step === 'signature' && 'Check-In Agreement' ||
+            step === 'success' && 'Success'
+          )}
         </p>
       </header>
 
-      {/* CAMERA STEP - shows live camera + capture button, OR captured image + review buttons */}
+      {/* ── CAMERA STEP ── */}
       {step === 'camera' && (
         <div className="relative flex-1 overflow-hidden bg-black flex flex-col">
           <div className="relative flex-1 overflow-hidden">
-            {/* Live video feed (hidden when image is captured) */}
             <video
               ref={videoRef}
               autoPlay
@@ -250,7 +336,6 @@ export default function MobileScanPage() {
             />
             <canvas ref={canvasRef} className="hidden" />
 
-            {/* Captured image preview */}
             {imageSrc && (
               <img
                 src={imageSrc}
@@ -259,7 +344,6 @@ export default function MobileScanPage() {
               />
             )}
 
-            {/* ID frame guide (only when camera is live) */}
             {camStatus === CAM_STATUS.READY && !imageSrc && (
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center px-6">
                 <div className="w-full max-w-md aspect-[1.586/1] relative">
@@ -271,7 +355,6 @@ export default function MobileScanPage() {
               </div>
             )}
 
-            {/* Status overlays */}
             {camStatus === CAM_STATUS.REQUESTING && !imageSrc && (
               <Overlay>
                 <Loader2 className="w-12 h-12 text-white animate-spin mb-4" />
@@ -321,12 +404,29 @@ export default function MobileScanPage() {
                 >
                   <RefreshCcw className="w-5 h-5" /> Retake
                 </button>
-                <button
-                  onClick={() => setStep('signature')}
-                  className="flex-[2] bg-amber-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2"
-                >
-                  <CheckCircle className="w-5 h-5" /> Next: Sign
-                </button>
+                {isIdScanOnly ? (
+                  /* ID-Scan mode: send photo directly */
+                  <button
+                    onClick={submitIdScan}
+                    disabled={isUploading}
+                    className="flex-[2] bg-amber-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isUploading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Upload className="w-5 h-5" />
+                    )}
+                    {isUploading ? 'Sending...' : 'Send Photo'}
+                  </button>
+                ) : (
+                  /* Full check-in mode: go to signature */
+                  <button
+                    onClick={() => setStep('signature')}
+                    className="flex-[2] bg-amber-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle className="w-5 h-5" /> Next: Sign
+                  </button>
+                )}
               </div>
             ) : (
               /* Capture button */
@@ -346,11 +446,10 @@ export default function MobileScanPage() {
         </div>
       )}
 
-      {/* SIGNATURE STEP */}
-      {step === 'signature' && (
+      {/* ── SIGNATURE STEP (only in full check-in mode) ── */}
+      {!isIdScanOnly && step === 'signature' && (
         <div className="flex-1 bg-zinc-900 overflow-hidden flex flex-col">
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* ID photo thumbnail */}
             {imageSrc && (
               <div className="rounded-lg overflow-hidden border border-zinc-700">
                 <p className="text-[10px] text-zinc-500 px-2 pt-1.5 font-bold uppercase tracking-wider">ID Photo Captured</p>
@@ -397,7 +496,6 @@ export default function MobileScanPage() {
               </div>
             </div>
 
-            {/* Upload error display */}
             {uploadError && (
               <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
@@ -423,14 +521,15 @@ export default function MobileScanPage() {
         </div>
       )}
 
-      {/* SUCCESS STEP */}
+      {/* ── SUCCESS STEP ── */}
       {step === 'success' && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center p-8 bg-zinc-950">
           <CheckCircle className="w-20 h-20 text-amber-500 mb-4" />
           <h2 className="text-xl font-bold mb-2">All Done!</h2>
           <p className="text-zinc-400 max-w-xs">
-            Your ID and signature have been securely transmitted to the front desk. Please hand this device back to the
-            clerk.
+            {isIdScanOnly
+              ? 'Your ID photo has been sent to the front desk. You can close this page.'
+              : 'Your ID and signature have been securely transmitted to the front desk. Please hand this device back to the clerk.'}
           </p>
         </div>
       )}
