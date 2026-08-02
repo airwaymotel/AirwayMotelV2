@@ -446,8 +446,7 @@ function VisionScanner({
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      setPreview(reader.result as string);
-      setStatus('preview');
+      processImage(reader.result as string);
     };
     reader.readAsDataURL(file);
   };
@@ -462,8 +461,7 @@ function VisionScanner({
       // Prefer the uploaded image (already in the ids bucket). Fall back to base64.
       const imageUrl = payload.imageStorageUrl || payload.imageBase64;
       if (imageUrl) {
-        setPreview(imageUrl);
-        setStatus('preview');
+        processImage(imageUrl);
       } else {
         setStatus('error');
         setErrorMsg('No image received from phone.');
