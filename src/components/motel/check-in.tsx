@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import {
   BedSingle, BedDouble, ArrowRight, ArrowLeft, CheckCircle,
-  CreditCard, Banknote, Wallet, QrCode, PenLine, Upload,
-  Camera, Loader2, X, ImageIcon, CheckCheck, Smartphone, Keyboard,
+  CreditCard, Banknote, Wallet, PenLine, Upload,
+  Camera, Loader2, X, ImageIcon, ScanLine,
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import SignatureCanvas from 'react-signature-canvas';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,18 +19,16 @@ import { useMotelStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import type { RoomType, PaymentMethod } from '@/lib/types';
+import IdScanner, { type ScannedIdData } from './id-scanner';
 
 const STEPS = [
   'Room',
-  'ID Method',
+  'Scan ID',
   'Guest Details',
-  'ID & Scan',
   'Payment',
   'Terms & Sign',
   'Confirm',
 ];
-
-type IdMethod = 'manual' | 'phone-scan';
 
 export default function CheckIn() {
   const rooms = useMotelStore((s) => s.rooms);
@@ -42,9 +39,8 @@ export default function CheckIn() {
   const addActivity = useMotelStore((s) => s.addActivity);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
 
-  // Step & method
+  // Step
   const [step, setStep] = useState(0);
-  const [idMethod, setIdMethod] = useState<IdMethod | null>(null);
 
   // Room selection
   const [roomType, setRoomType] = useState<RoomType>('1-bed');
@@ -61,6 +57,10 @@ export default function CheckIn() {
   const [idType, setIdType] = useState('Driver License');
   const [idState, setIdState] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
+  const [address, setAddress] = useState('');
+  const [gender, setGender] = useState('');
+  const [eyeColor, setEyeColor] = useState('');
+  const [height, setHeight] = useState('');
   const [checkInDate, setCheckInDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [checkOutDate, setCheckOutDate] = useState(() =>
     new Date(Date.now() + 86400000).toISOString().split('T')[0]
@@ -68,21 +68,18 @@ export default function CheckIn() {
   const [checkInTime, setCheckInTime] = useState('2:00 PM');
   const [checkOutTime, setCheckOutTime] = useState('10:00 AM');
 
-  // ID photo (manual upload)
+  // ID photo
   const [idPhotoPreview, setIdPhotoPreview] = useState<string | null>(null);
   const [idPhotoUrl, setIdPhotoUrl] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ID scan tracking
+  const [idScanned, setIdScanned] = useState(false);
+  const [scannedIdImage, setScannedIdImage] = useState<string | undefined>();
+
   // Signature
   const sigCanvas = useRef<SignatureCanvas>(null);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string>('');
-
-  // QR / Phone scan
-  const [scanSessionId] = useState(() => Math.random().toString(36).substring(2, 10) + Date.now().toString(36));
-  const [scanReceived, setScanReceived] = useState(false);
-  const [scannedImageUrl, setScannedImageUrl] = useState<string>('');
-  const [scannedSignatureUrl, setScannedSignatureUrl] = useState<string>('');
-  const realtimeChannelRef = useRef<any>(null);
 
   const [completedStayId, setCompletedStayId] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -95,58 +92,15 @@ export default function CheckIn() {
   const selectedRoom = rooms.find((r) => r.id === selectedRoomId);
   const rate = selectedRoom?.rate ?? (roomType === '1-bed' ? 65 : 85);
 
-  // ── QR URL (the mobile scan page) ──
-  const scanUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/scan/${scanSessionId}`
-    : '';
-
-  // ── Supabase Realtime listener for phone scan ──
-  useEffect(() => {
-    if (!supabase || idMethod !== 'phone-scan' || step !== 3) return;
-
-    const channel = supabase.channel(`scan_${scanSessionId}`, {
-      config: { broadcast: { self: true } },
-    });
-
-    channel.on('broadcast', { event: 'id_scanned' }, (payload) => {
-      const { imageUrl, signatureDataUrl: sigUrl } = payload.payload;
-      if (imageUrl) {
-        setScannedImageUrl(imageUrl);
-        setIdPhotoUrl(imageUrl);
-      }
-      if (sigUrl) {
-        setScannedSignatureUrl(sigUrl);
-        setSignatureDataUrl(sigUrl);
-      }
-      setScanReceived(true);
-      toast.success('ID scan received from phone!');
-    });
-
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('[Scan] Listening for ID scan on channel:', `scan_${scanSessionId}`);
-      }
-    });
-
-    realtimeChannelRef.current = channel;
-
-    return () => {
-      if (supabase) supabase.removeChannel(channel);
-      realtimeChannelRef.current = null;
-    };
-  }, [idMethod, step, scanSessionId]);
-
   // ── Manual file upload handler ──
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Preview
     const reader = new FileReader();
     reader.onload = (ev) => setIdPhotoPreview(ev.target?.result as string);
     reader.readAsDataURL(file);
 
-    // Upload to Supabase Storage if connected
     if (supabase) {
       try {
         const fileName = `id_admin_${Date.now()}_${file.name}`;
@@ -165,24 +119,54 @@ export default function CheckIn() {
         toast.error('Upload failed');
       }
     } else {
-      // No Supabase — just use the data URL as preview
       setIdPhotoUrl(reader.result as string);
     }
+  }, []);
+
+  // ── ID Scan Complete Handler ──
+  const handleScanComplete = useCallback((data: ScannedIdData, imageBase64?: string) => {
+    // Auto-fill all form fields from scanned data
+    if (data.firstName) setFirstName(data.firstName);
+    if (data.lastName) setLastName(data.lastName);
+    if (data.idNumber) setIdNumber(data.idNumber);
+    if (data.idType) setIdType(data.idType);
+    if (data.issuingState) setIdState(data.issuingState);
+    if (data.dateOfBirth) setDateOfBirth(data.dateOfBirth);
+    if (data.gender) setGender(data.gender);
+    if (data.eyeColor) setEyeColor(data.eyeColor);
+    if (data.height) setHeight(data.height);
+
+    // Build address string
+    if (data.address) {
+      const parts = [
+        data.address.street,
+        data.address.city,
+        data.address.state,
+        data.address.zipCode,
+      ].filter(Boolean);
+      if (parts.length > 0) setAddress(parts.join(', '));
+    }
+
+    // Store scanned image
+    if (imageBase64) {
+      setScannedIdImage(imageBase64);
+      setIdPhotoPreview(imageBase64);
+      setIdPhotoUrl(imageBase64);
+    }
+
+    setIdScanned(true);
+    toast.success('ID data extracted — please review and add contact info');
   }, []);
 
   // ── Step validation ──
   const canNext = (): boolean => {
     switch (step) {
       case 0: return availableRooms.length > 0;
-      case 1: return idMethod !== null;
+      case 1: return idScanned && idNumber.length >= 4;
       case 2: return firstName.length >= 2 && lastName.length >= 2 && phone.length >= 10;
-      case 3:
-        if (idMethod === 'phone-scan') return scanReceived;
-        return idNumber.length >= 4 && dateOfBirth.length > 0;
-      case 4: return true;
-      case 5:
-        return termsAccepted;
-      case 6: return false;
+      case 3: return true;
+      case 4: return termsAccepted;
+      case 5: return false;
       default: return false;
     }
   };
@@ -261,18 +245,17 @@ export default function CheckIn() {
       });
 
       // Save signature to Supabase if connected
-      const sigData = idMethod === 'phone-scan' ? scannedSignatureUrl : signatureDataUrl;
-      if (supabase && sigData) {
+      if (supabase && signatureDataUrl) {
         const { error } = await supabase.from('signatures').insert({
           stay_id: stayId,
           guest_id: guestId,
-          signature_data_url: sigData,
+          signature_data_url: signatureDataUrl,
         });
         if (error) console.error('Failed to save signature:', error);
       }
 
       setCompletedStayId(stayId);
-      setStep(6);
+      setStep(5);
       toast.success('Check-in completed successfully!');
     } catch (err) {
       console.error('Check-in error:', err);
@@ -284,7 +267,6 @@ export default function CheckIn() {
 
   const resetForm = () => {
     setStep(0);
-    setIdMethod(null);
     setRoomType('1-bed');
     setSelectedRoomId('');
     setPaymentMethod('card');
@@ -297,6 +279,10 @@ export default function CheckIn() {
     setIdType('Driver License');
     setIdState('');
     setDateOfBirth('');
+    setAddress('');
+    setGender('');
+    setEyeColor('');
+    setHeight('');
     setCheckInDate(new Date().toISOString().split('T')[0]);
     setCheckOutDate(new Date(Date.now() + 86400000).toISOString().split('T')[0]);
     setCheckInTime('2:00 PM');
@@ -304,9 +290,8 @@ export default function CheckIn() {
     setIdPhotoPreview(null);
     setIdPhotoUrl('');
     setSignatureDataUrl('');
-    setScannedImageUrl('');
-    setScannedSignatureUrl('');
-    setScanReceived(false);
+    setScannedIdImage(undefined);
+    setIdScanned(false);
     setCompletedStayId('');
     setSubmitting(false);
   };
@@ -401,58 +386,82 @@ export default function CheckIn() {
           </Card>
         )}
 
-        {/* ── Step 1: ID Method Choice ── */}
+        {/* ── Step 1: Scan ID ── */}
         {step === 1 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">How will you verify the guest&apos;s ID?</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Manual Entry */}
-                <button
-                  onClick={() => setIdMethod('manual')}
-                  className={`p-6 rounded-lg border-2 transition-all cursor-pointer text-left space-y-3 ${
-                    idMethod === 'manual'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/40'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Keyboard className="w-8 h-8 text-muted-foreground" />
-                    <span className="font-semibold text-lg">Manual Entry</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Type in ID details and upload a photo of the ID from this computer.
-                  </p>
-                  {idMethod === 'manual' && (
-                    <Badge className="bg-primary text-primary-foreground">Selected</Badge>
-                  )}
-                </button>
+          <div className="space-y-4">
+            <IdScanner
+              onScanComplete={handleScanComplete}
+            />
 
-                {/* Phone Scan */}
-                <button
-                  onClick={() => setIdMethod('phone-scan')}
-                  className={`p-6 rounded-lg border-2 transition-all cursor-pointer text-left space-y-3 ${
-                    idMethod === 'phone-scan'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/40'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Smartphone className="w-8 h-8 text-muted-foreground" />
-                    <span className="font-semibold text-lg">Phone Scan</span>
+            {/* Manual ID entry fallback (always visible) */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
+                  <PenLine className="w-4 h-4" /> Or enter manually
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="mb-1 block text-xs">ID Type</Label>
+                    <Select value={idType} onValueChange={setIdType}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Driver License">Driver License</SelectItem>
+                        <SelectItem value="State ID">State ID</SelectItem>
+                        <SelectItem value="Passport">Passport</SelectItem>
+                        <SelectItem value="Military ID">Military ID</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Show a QR code to the guest. They scan it with their phone camera to upload their ID photo and sign.
-                  </p>
-                  {idMethod === 'phone-scan' && (
-                    <Badge className="bg-primary text-primary-foreground">Selected</Badge>
+                  <div>
+                    <Label className="mb-1 block text-xs">ID State</Label>
+                    <Input value={idState} onChange={(e) => setIdState(e.target.value)} placeholder="CO" className="h-9 text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <Label className="mb-1 block text-xs">ID Number *</Label>
+                  <Input value={idNumber} onChange={(e) => { setIdNumber(e.target.value); if (e.target.value.length >= 4) setIdScanned(true); }} placeholder="DL-123456" className="h-9 text-sm" />
+                </div>
+                <div>
+                  <Label className="mb-1 block text-xs">Date of Birth *</Label>
+                  <Input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className="h-9 text-sm" />
+                </div>
+
+                {/* Optional file upload */}
+                <div>
+                  <Label className="mb-1 block text-xs">Upload ID Photo</Label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  {idPhotoPreview ? (
+                    <div className="relative rounded-lg overflow-hidden border border-border">
+                      <img src={idPhotoPreview} alt="ID Preview" className="w-full max-h-32 object-contain bg-muted/30" />
+                      <button
+                        onClick={() => { setIdPhotoPreview(null); setIdPhotoUrl(''); }}
+                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full p-4 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors cursor-pointer text-xs"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Upload ID photo</span>
+                    </button>
                   )}
-                </button>
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* ── Step 2: Guest Details ── */}
@@ -462,6 +471,16 @@ export default function CheckIn() {
               <CardTitle className="text-lg">Guest Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Scan info banner */}
+              {idScanned && (
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                  <p className="text-xs text-green-700 dark:text-green-300">
+                    ID data auto-filled from scan. Please verify and add contact info.
+                  </p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="firstName" className="mb-1.5 block">First Name *</Label>
@@ -480,6 +499,54 @@ export default function CheckIn() {
                 <Label htmlFor="email" className="mb-1.5 block">Email</Label>
                 <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="guest@email.com" />
               </div>
+
+              {/* Auto-filled ID info (read-only display) */}
+              <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">From ID Scan</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">ID Number</p>
+                    <p className="text-sm font-medium font-mono">{idNumber || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Date of Birth</p>
+                    <p className="text-sm font-medium">{dateOfBirth || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">ID Type</p>
+                    <p className="text-sm font-medium">{idType}{idState ? ` — ${idState}` : ''}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Gender</p>
+                    <p className="text-sm font-medium">{gender || '—'}</p>
+                  </div>
+                  {address && (
+                    <div className="col-span-2">
+                      <p className="text-[10px] text-muted-foreground">Address</p>
+                      <p className="text-sm font-medium">{address}</p>
+                    </div>
+                  )}
+                  {(eyeColor || height) && (
+                    <>
+                      {eyeColor && (
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Eye Color</p>
+                          <p className="text-sm font-medium">{eyeColor}</p>
+                        </div>
+                      )}
+                      {height && (
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Height</p>
+                          <p className="text-sm font-medium">{height}</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="mb-1.5 block">Check-in Date</Label>
@@ -518,151 +585,8 @@ export default function CheckIn() {
           </Card>
         )}
 
-        {/* ── Step 3: ID Info / Scan ── */}
-        {step === 3 && idMethod === 'manual' && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Keyboard className="w-5 h-5" /> Manual ID Entry
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="mb-1.5 block">ID Type</Label>
-                  <Select value={idType} onValueChange={setIdType}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Driver License">Driver License</SelectItem>
-                      <SelectItem value="State ID">State ID</SelectItem>
-                      <SelectItem value="Passport">Passport</SelectItem>
-                      <SelectItem value="Military ID">Military ID</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="mb-1.5 block">ID State</Label>
-                  <Input value={idState} onChange={(e) => setIdState(e.target.value)} placeholder="CO" />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="idNumber" className="mb-1.5 block">ID Number *</Label>
-                <Input id="idNumber" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="DL-123456" />
-              </div>
-              <div>
-                <Label htmlFor="dob" className="mb-1.5 block">Date of Birth *</Label>
-                <Input id="dob" type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
-              </div>
-
-              {/* File Upload */}
-              <div>
-                <Label className="mb-1.5 block">Upload ID Photo</Label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                {idPhotoPreview ? (
-                  <div className="relative rounded-lg overflow-hidden border border-border">
-                    <img src={idPhotoPreview} alt="ID Preview" className="w-full max-h-48 object-contain bg-muted/30" />
-                    <button
-                      onClick={() => { setIdPhotoPreview(null); setIdPhotoUrl(''); }}
-                      className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full p-8 border-2 border-dashed border-border rounded-lg flex flex-col items-center gap-2 text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors cursor-pointer"
-                  >
-                    <Upload className="w-8 h-8" />
-                    <span className="text-sm font-medium">Click to upload ID photo</span>
-                    <span className="text-xs">JPG, PNG — or take a photo</span>
-                  </button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {step === 3 && idMethod === 'phone-scan' && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <QrCode className="w-5 h-5" /> Phone Scan — QR Code
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <p className="text-sm text-muted-foreground">
-                Show this QR code to the guest. They scan it with their phone to take a photo of their ID and sign the agreement.
-              </p>
-
-              {/* QR Code */}
-              <div className="flex justify-center">
-                <div className="bg-white p-4 rounded-xl">
-                  <QRCodeSVG
-                    value={scanUrl}
-                    size={220}
-                    level="M"
-                    includeMargin={false}
-                  />
-                </div>
-              </div>
-
-              <p className="text-xs text-center text-muted-foreground break-all">
-                {scanUrl}
-              </p>
-
-              <Separator />
-
-              {/* Status */}
-              {scanReceived ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                    <CheckCheck className="w-5 h-5" />
-                    <span className="font-semibold">ID scan received from phone!</span>
-                  </div>
-
-                  {scannedImageUrl && (
-                    <div className="rounded-lg overflow-hidden border border-border">
-                      <p className="text-xs font-medium text-muted-foreground px-3 pt-2">Scanned ID Photo:</p>
-                      <img
-                        src={scannedImageUrl}
-                        alt="Scanned ID"
-                        className="w-full max-h-48 object-contain bg-muted/30 p-2"
-                      />
-                    </div>
-                  )}
-
-                  {scannedSignatureUrl && (
-                    <div className="rounded-lg overflow-hidden border border-border">
-                      <p className="text-xs font-medium text-muted-foreground px-3 pt-2">Guest Signature:</p>
-                      <img
-                        src={scannedSignatureUrl}
-                        alt="Guest Signature"
-                        className="w-full max-h-24 object-contain bg-white p-2"
-                      />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <Loader2 className="w-6 h-6 text-muted-foreground animate-spin mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground animate-pulse">Waiting for guest to scan and upload...</p>
-                  <p className="text-xs text-muted-foreground mt-1">The ID photo and signature will appear here automatically.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ── Step 4: Payment ── */}
-        {step === 4 && (
+        {/* ── Step 3: Payment ── */}
+        {step === 3 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Payment Method</CardTitle>
@@ -714,8 +638,8 @@ export default function CheckIn() {
           </Card>
         )}
 
-        {/* ── Step 5: Terms & Signature ── */}
-        {step === 5 && (
+        {/* ── Step 4: Terms & Signature ── */}
+        {step === 4 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Terms & Signature</CardTitle>
@@ -747,62 +671,43 @@ export default function CheckIn() {
                 </Label>
               </div>
 
-              {/* Signature — different for each method */}
-              {idMethod === 'phone-scan' ? (
-                <div>
-                  {scannedSignatureUrl ? (
-                    <div className="border border-border rounded-lg p-3 bg-white">
-                      <p className="text-xs font-medium text-muted-foreground mb-2">Signature captured from phone:</p>
-                      <img
-                        src={scannedSignatureUrl}
-                        alt="Guest Signature"
-                        className="max-h-24 object-contain mix-blend-multiply"
-                      />
-                    </div>
-                  ) : (
-                    <div className="border border-dashed border-border rounded-lg p-6 text-center text-muted-foreground">
-                      <p className="text-sm">Waiting for signature from phone...</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <div className="flex justify-between items-end mb-2">
-                    <Label className="text-xs font-medium">Guest Signature *</Label>
-                    <button
-                      type="button"
-                      onClick={() => { sigCanvas.current?.clear(); setSignatureDataUrl(''); }}
-                      className="text-xs text-destructive font-medium hover:underline"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div
-                    className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden"
-                    style={{
-                      backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
-                      backgroundSize: '100% 20px',
-                    }}
+              {/* Signature pad */}
+              <div>
+                <div className="flex justify-between items-end mb-2">
+                  <Label className="text-xs font-medium">Guest Signature *</Label>
+                  <button
+                    type="button"
+                    onClick={() => { sigCanvas.current?.clear(); setSignatureDataUrl(''); }}
+                    className="text-xs text-destructive font-medium hover:underline"
                   >
-                    <SignatureCanvas
-                      ref={sigCanvas}
-                      canvasProps={{ className: 'w-full h-full absolute inset-0 cursor-crosshair' }}
-                      penColor="#0f172a"
-                      onEnd={() => {
-                        if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
-                          setSignatureDataUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
-                        }
-                      }}
-                    />
-                  </div>
+                    Clear
+                  </button>
                 </div>
-              )}
+                <div
+                  className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden"
+                  style={{
+                    backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
+                    backgroundSize: '100% 20px',
+                  }}
+                >
+                  <SignatureCanvas
+                    ref={sigCanvas}
+                    canvasProps={{ className: 'w-full h-full absolute inset-0 cursor-crosshair' }}
+                    penColor="#0f172a"
+                    onEnd={() => {
+                      if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
+                        setSignatureDataUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
 
-        {/* ── Step 6: Confirmation ── */}
-        {step === 6 && (
+        {/* ── Step 5: Confirmation ── */}
+        {step === 5 && (
           <Card>
             <CardContent className="py-10 text-center">
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -857,7 +762,7 @@ export default function CheckIn() {
         )}
 
         {/* Navigation Buttons */}
-        {step < 6 && (
+        {step < 5 && (
           <div className="flex justify-between mt-4">
             <Button
               variant="outline"
@@ -868,7 +773,7 @@ export default function CheckIn() {
               Back
             </Button>
             <Button
-              onClick={step === 5 ? handleSubmit : handleNext}
+              onClick={step === 4 ? handleSubmit : handleNext}
               disabled={!canNext() || submitting}
             >
               {submitting ? (
@@ -878,7 +783,7 @@ export default function CheckIn() {
                 </>
               ) : (
                 <>
-                  {step === 5 ? 'Complete Check-In' : 'Continue'}
+                  {step === 4 ? 'Complete Check-In' : 'Continue'}
                   <ArrowRight className="w-4 h-4 ml-1" />
                 </>
               )}
