@@ -27,16 +27,23 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   return (
     <aside className="hidden md:flex md:w-56 lg:w-64 flex-col bg-card border-r border-border h-full">
       {/* Brand */}
-      <div className="px-5 pt-6 pb-5 border-b border-border">
-        <h1 className="text-lg font-bold text-foreground leading-none">
-          Airway
-        </h1>
-        <h1 className="text-lg font-bold text-amber-500 dark:text-amber-400 leading-none mt-0.5">
-          Motel
-        </h1>
-        <p className="text-[10px] text-muted-foreground mt-2 uppercase tracking-wider">
-          Night Registry &middot; Est. Denver
-        </p>
+      <div className="px-5 pt-6 pb-5 border-b border-border flex items-center gap-3">
+        <div className="shrink-0">
+          <svg width="36" height="36" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="40" height="40" rx="10" fill="#f59e0b" />
+            <path d="M12 28L20 12L28 28" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M15 22H25" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1 className="text-lg font-bold text-foreground leading-none flex items-center gap-1">
+            <span>Airway</span>
+            <span className="text-amber-500 dark:text-amber-400">Motel</span>
+          </h1>
+          <p className="text-[10px] text-muted-foreground mt-1.5 uppercase tracking-widest font-bold">
+            Admin
+          </p>
+        </div>
       </div>
 
       {/* Nav */}

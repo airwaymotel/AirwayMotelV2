@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Airway Motel — Night Registry",
+  title: "Airway Motel — Admin",
   description: "Motel management system for Airway Motel. Room status, check-in, checkout, guest history, and billing.",
   keywords: ["Airway Motel", "motel management", "night registry", "check-in", "checkout"],
   authors: [{ name: "Airway Motel" }],
