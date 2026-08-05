@@ -618,7 +618,7 @@ const STEPS = [
                 >
                   <BedSingle className="w-8 h-8 mb-2 text-muted-foreground" />
                   <p className="font-semibold">1-Bed King</p>
-                  <p className="text-sm text-muted-foreground">$65/night</p>
+                   <p className="text-sm text-muted-foreground">${motelSettings.oneBedRate}/night</p>
                 </button>
                 <button
                   onClick={() => { setRoomType('2-bed'); setSelectedRoomId(''); }}
@@ -630,7 +630,7 @@ const STEPS = [
                 >
                   <BedDouble className="w-8 h-8 mb-2 text-muted-foreground" />
                   <p className="font-semibold">2-Bed Queen</p>
-                  <p className="text-sm text-muted-foreground">$85/night</p>
+                   <p className="text-sm text-muted-foreground">${motelSettings.twoBedRate}/night</p>
                 </button>
               </div>
 
