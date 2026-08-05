@@ -27,6 +27,11 @@ const navItems: { icon: typeof LayoutDashboard; label: string; tab: NavTab }[] =
 export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const router = useRouter();
 
+  const handleNav = (tab: NavTab) => {
+    onTabChange(tab);
+    router.push('/');
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('airway_auth');
     router.push('/login');
@@ -64,7 +69,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           return (
             <button
               key={item.tab}
-              onClick={() => onTabChange(item.tab)}
+              onClick={() => handleNav(item.tab)}
               className={cn(
                 'group relative flex items-center gap-3 px-5 py-2.5 transition-colors text-sm cursor-pointer',
                 isActive
@@ -103,6 +108,11 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 export function MobileNav({ activeTab, onTabChange }: SidebarProps) {
   const router = useRouter();
 
+  const handleNav = (tab: NavTab) => {
+    onTabChange(tab);
+    router.push('/');
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('airway_auth');
     router.push('/login');
@@ -115,7 +125,7 @@ export function MobileNav({ activeTab, onTabChange }: SidebarProps) {
         return (
           <button
             key={item.tab}
-            onClick={() => onTabChange(item.tab)}
+            onClick={() => handleNav(item.tab)}
             className={cn(
               'flex flex-col items-center justify-center gap-0.5 py-1 px-2 transition-colors cursor-pointer min-w-[48px] min-h-[44px]',
               isActive ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
