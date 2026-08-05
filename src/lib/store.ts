@@ -137,7 +137,8 @@ const DEFAULT_SETTINGS: MotelSettings = {
   weeklyDiscountAmount: 200,
 };
 
-function mapSettingsFromDb(row: Record<string, unknown>): MotelSettings {
+function mapSettingsFromDb(row: Record<string, unknown> | undefined): MotelSettings {
+  if (!row) return DEFAULT_SETTINGS;
   return {
     oneBedRate: Number(row.one_bed_rate) ?? 80,
     twoBedRate: Number(row.two_bed_rate) ?? 100,
@@ -262,7 +263,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
     set({ isLoading: true });
 
     const settingsData = await fetchFromApi<Record<string, unknown>>('/api/motel-settings');
-    const settings = settingsData ? mapSettingsFromDb(settingsData[0] as Record<string, unknown>) : DEFAULT_SETTINGS;
+    const settings = settingsData && settingsData.length > 0 ? mapSettingsFromDb(settingsData[0]) : DEFAULT_SETTINGS;
 
     const [roomsData, guestsData, staysData, paymentsData] = await Promise.all([
       fetchFromApi<Record<string, unknown>>('/api/rooms'),
