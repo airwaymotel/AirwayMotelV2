@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Sun, Moon, User, DoorOpen } from 'lucide-react';
+import { Search, Sun, Moon, User, DoorOpen, Loader2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useRouter } from 'next/navigation';
 import { useMotelStore } from '@/lib/store';
@@ -21,6 +21,8 @@ export default function Home() {
   const router = useRouter();
   const activeTab = useMotelStore((s) => s.activeTab);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
+  const dataLoaded = useMotelStore((s) => s.dataLoaded);
+  const isLoading = useMotelStore((s) => s.isLoading);
   const { theme, setTheme } = useTheme();
   const [now, setNow] = useState<Date | null>(null);
 
@@ -248,7 +250,16 @@ export default function Home() {
 
             {/* Content */}
             <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-              {renderContent()}
+              {!dataLoaded || isLoading ? (
+                <div className="flex items-center justify-center h-full min-h-[60vh]">
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-muted-foreground text-sm">Loading data...</p>
+                  </div>
+                </div>
+              ) : (
+                renderContent()
+              )}
             </main>
           </div>
         </div>

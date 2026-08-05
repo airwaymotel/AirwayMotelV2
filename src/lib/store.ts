@@ -195,6 +195,7 @@ interface MotelStore {
   activeTab: NavTab;
   isLoading: boolean;
   isUsingSupabase: boolean;
+  dataLoaded: boolean;
 
   // Navigation
   setActiveTab: (tab: NavTab) => void;
@@ -240,14 +241,15 @@ interface MotelStore {
 // ── Store ────────────────────────────────────────────────────────
 
 export const useMotelStore = create<MotelStore>((set, get) => ({
-  rooms: MOCK_ROOMS,
-  guests: MOCK_GUESTS,
-  stays: MOCK_STAYS,
-  payments: MOCK_PAYMENTS,
-  activityLog: MOCK_ACTIVITY,
+  rooms: [],
+  guests: [],
+  stays: [],
+  payments: [],
+  activityLog: [],
   activeTab: 'dashboard',
   isLoading: false,
   isUsingSupabase: false,
+  dataLoaded: false,
   motelSettings: DEFAULT_SETTINGS,
 
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -269,12 +271,13 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
     ]);
 
     set({
-      rooms: roomsData ? roomsData.map((r) => mapRoomFromDb(r, settings)) : MOCK_ROOMS,
-      guests: guestsData ? guestsData.map(mapGuestFromDb) : MOCK_GUESTS,
-      stays: staysData ? (staysData as Record<string, unknown>[]).map(mapStayFromDb) : MOCK_STAYS,
-      payments: paymentsData ? paymentsData.map(mapPaymentFromDb) : MOCK_PAYMENTS,
+      rooms: roomsData ? roomsData.map((r) => mapRoomFromDb(r, settings)) : [],
+      guests: guestsData ? guestsData.map(mapGuestFromDb) : [],
+      stays: staysData ? (staysData as Record<string, unknown>[]).map(mapStayFromDb) : [],
+      payments: paymentsData ? paymentsData.map(mapPaymentFromDb) : [],
       motelSettings: settings,
       isUsingSupabase: !!(roomsData || guestsData || staysData || paymentsData),
+      dataLoaded: true,
       isLoading: false,
     });
   },
