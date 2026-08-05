@@ -79,10 +79,12 @@ export default function Guests() {
 
   const filteredData = useMemo(() => {
     return historyData.filter((guest) => {
+      const receiptId = guest.stayId.substring(0, 8).toUpperCase();
       const matchesSearch =
         guest.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         guest.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        guest.phone.toLowerCase().includes(searchQuery.toLowerCase());
+        guest.phone.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        receiptId.includes(searchQuery.toUpperCase());
       const matchesRoom = roomTypeFilter === 'All Types' || guest.roomType === roomTypeFilter;
       return matchesSearch && matchesRoom;
     });
@@ -104,11 +106,11 @@ export default function Guests() {
   })();
 
   const handleExportCSV = () => {
-    const headers = ['Guest Name', 'ID', 'Room', 'Stay Period', 'Details', 'Room Type', 'Status', 'Total Paid'];
+    const headers = ['Receipt ID', 'Guest Name', 'ID', 'Room', 'Stay Period', 'Details', 'Room Type', 'Status', 'Total Paid'];
     const csvContent = [
       headers.join(','),
       ...filteredData.map(row => 
-        `"${row.name}","${row.id}","${row.room}","${row.dates}","${row.details}","${row.roomType}","${row.status}","${row.paid}"`
+        `"${row.stayId.substring(0, 8).toUpperCase()}","${row.name}","${row.id}","${row.room}","${row.dates}","${row.details}","${row.roomType}","${row.status}","${row.paid}"`
       )
     ].join('\n');
 
@@ -274,7 +276,7 @@ export default function Guests() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-8"
-                placeholder="Name, ID, or Phone..."
+                placeholder="Name, ID, Phone, or Receipt ID..."
               />
             </div>
             <div className="md:col-span-4">
@@ -319,6 +321,7 @@ export default function Guests() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="uppercase text-[10px]">Guest Name</TableHead>
+                  <TableHead className="uppercase text-[10px]">Receipt ID</TableHead>
                   <TableHead className="uppercase text-[10px]">ID</TableHead>
                   <TableHead className="uppercase text-[10px]">Phone</TableHead>
                   <TableHead className="uppercase text-[10px]">Room #</TableHead>
@@ -342,6 +345,7 @@ export default function Guests() {
                         </div>
                       </div>
                     </TableCell>
+                    <TableCell className="text-xs font-mono text-muted-foreground">{row.stayId.substring(0, 8).toUpperCase()}</TableCell>
                     <TableCell className="text-sm font-mono">{row.id}</TableCell>
                     <TableCell className="text-sm">{row.phone || '—'}</TableCell>
                     <TableCell className="text-sm font-medium">#{row.room}</TableCell>
@@ -389,7 +393,7 @@ export default function Guests() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     No records found matching your filters.
                   </TableCell>
                 </TableRow>
