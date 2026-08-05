@@ -20,8 +20,7 @@ function timeNow(): string {
 // Our app uses camelCase. Supabase uses snake_case.
 // These mappers translate between the two.
 
-function mapRoomFromDb(row: Record<string, unknown>): Room {
-  const settings = get().motelSettings;
+function mapRoomFromDb(row: Record<string, unknown>, settings: MotelSettings): Room {
   return {
     id: row.id as string,
     roomNumber: row.room_number as string,
@@ -262,20 +261,22 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
 
     set({ isLoading: true });
 
-    const [roomsData, guestsData, staysData, paymentsData, settingsData] = await Promise.all([
+    const settingsData = await fetchFromApi<Record<string, unknown>>('/api/motel-settings');
+    const settings = settingsData ? mapSettingsFromDb(settingsData[0] as Record<string, unknown>) : DEFAULT_SETTINGS;
+
+    const [roomsData, guestsData, staysData, paymentsData] = await Promise.all([
       fetchFromApi<Record<string, unknown>>('/api/rooms'),
       fetchFromApi<Record<string, unknown>>('/api/guests'),
       fetchFromApi<Record<string, unknown>>('/api/stays'),
       fetchFromApi<Record<string, unknown>>('/api/payments'),
-      fetchFromApi<Record<string, unknown>>('/api/motel-settings'),
     ]);
 
     set({
-      rooms: roomsData ? roomsData.map(mapRoomFromDb) : MOCK_ROOMS,
+      rooms: roomsData ? roomsData.map((r) => mapRoomFromDb(r, settings)) : MOCK_ROOMS,
       guests: guestsData ? guestsData.map(mapGuestFromDb) : MOCK_GUESTS,
       stays: staysData ? (staysData as Record<string, unknown>[]).map(mapStayFromDb) : MOCK_STAYS,
       payments: paymentsData ? paymentsData.map(mapPaymentFromDb) : MOCK_PAYMENTS,
-      motelSettings: settingsData ? mapSettingsFromDb(settingsData[0] as Record<string, unknown>) : DEFAULT_SETTINGS,
+      motelSettings: settings,
       isUsingSupabase: !!(roomsData || guestsData || staysData || paymentsData),
       isLoading: false,
     });
