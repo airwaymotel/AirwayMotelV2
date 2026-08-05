@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useMotelStore } from '@/lib/store';
 import type { Guest, Room, Stay, Payment } from '@/lib/types';
 import { jsPDF } from 'jspdf';
-import { Download, Loader2, FileText } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface PrintData {
   stay: Stay;
@@ -201,9 +201,6 @@ export default function InvoicePage() {
 
   const [data, setData] = useState<PrintData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [fileName, setFileName] = useState('');
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -287,32 +284,20 @@ export default function InvoicePage() {
     load();
   }, [stayId, stays, guests, rooms, payments]);
 
-  // Generate PDF and create preview URL
+  // Generate PDF and auto-download
   useEffect(() => {
     if (data) {
       try {
         const doc = generateReceiptPdf(data);
-        const blob = doc.output('blob');
-        const url = URL.createObjectURL(blob);
-        setPdfUrl(url);
-        setFileName(`receipt_${data.guest.lastName || 'guest'}_${data.room.roomNumber || 'room'}`);
-        setReady(true);
+        const fileName = `${data.guest.firstName || ''} ${data.guest.lastName || ''}`.trim() || 'Guest';
+        doc.save(`${fileName}.Receipt.pdf`);
+        window.close();
       } catch (err) {
         console.error('PDF generation error:', err);
         setError('Failed to generate PDF');
       }
     }
   }, [data]);
-
-  const handleDownload = () => {
-    if (!pdfUrl || !fileName) return;
-    const a = document.createElement('a');
-    a.href = pdfUrl;
-    a.download = `${fileName}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
 
   if (error) {
     return (
@@ -323,90 +308,11 @@ export default function InvoicePage() {
     );
   }
 
-  if (!ready) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif', background: '#fafafa' }}>
-        <Loader2 style={{ width: '32px', height: '32px', animation: 'spin 0.8s linear infinite', color: '#a1a1aa' }} />
-        <p style={{ marginTop: '16px', color: '#71717a', fontSize: '14px' }}>Generating PDF...</p>
-        <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
-      </div>
-    );
-  }
-
   return (
-    <div style={{ minHeight: '100vh', fontFamily: 'sans-serif', background: '#f5f5f5', display: 'flex', flexDirection: 'column' }}>
-      {/* Top bar with filename input and download button */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e5e5e5', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <FileText style={{ width: '20px', height: '20px', color: '#71717a' }} />
-        <span style={{ fontSize: '14px', fontWeight: 600, color: '#18181b' }}>Receipt Preview</span>
-        <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input
-            type="text"
-            value={fileName}
-            onChange={(e) => setFileName(e.target.value)}
-            style={{
-              padding: '6px 12px',
-              border: '1px solid #d4d4d8',
-              borderRadius: '6px',
-              fontSize: '13px',
-              width: '280px',
-              outline: 'none',
-            }}
-          />
-          <span style={{ fontSize: '13px', color: '#71717a' }}>.pdf</span>
-        </div>
-        <button
-          onClick={handleDownload}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '8px 16px',
-            background: '#18181b',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '13px',
-            fontWeight: 500,
-          }}
-        >
-          <Download style={{ width: '14px', height: '14px' }} />
-          Download PDF
-        </button>
-        <button
-          onClick={() => window.close()}
-          style={{
-            padding: '8px 12px',
-            background: 'transparent',
-            color: '#71717a',
-            border: '1px solid #d4d4d8',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
-        >
-          Close
-        </button>
-      </div>
-
-      {/* PDF Preview */}
-      <div style={{ flex: 1, padding: '20px', display: 'flex', justifyContent: 'center' }}>
-        {pdfUrl && (
-          <iframe
-            src={pdfUrl}
-            style={{
-              width: '100%',
-              maxWidth: '900px',
-              height: 'calc(100vh - 80px)',
-              border: 'none',
-              borderRadius: '8px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            }}
-          />
-        )}
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif', background: '#fafafa' }}>
+      <Loader2 style={{ width: '32px', height: '32px', animation: 'spin 0.8s linear infinite', color: '#a1a1aa' }} />
+      <p style={{ marginTop: '16px', color: '#71717a', fontSize: '14px' }}>Generating receipt...</p>
+      <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
     </div>
   );
 }

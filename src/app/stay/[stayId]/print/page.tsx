@@ -3,9 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useMotelStore } from '@/lib/store';
-import { supabase } from '@/lib/supabase';
 import { jsPDF } from 'jspdf';
-import { Download, Loader2, FileText } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 function fetchImageAsBase64(url: string): Promise<string | null> {
   return fetch(url)
@@ -102,11 +101,8 @@ async function generateRegistrationPdf(stayId: string) {
   y += 6;
 
   // ── Guest Info Fields ──
-  const colGap = 5;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  const labelX = leftCol + 3;
-  const valueX = leftCol + 28;
   const lineLen = halfWidth - 12;
   const rowH = 6;
 
@@ -146,13 +142,12 @@ async function generateRegistrationPdf(stayId: string) {
   y += rowH + 4;
 
   doc.text('Address:', leftCol, y);
-  doc.line(labelX, y + 1, leftCol + lineLen, y + 1);
+  doc.line(leftCol + 3, y + 1, leftCol + lineLen, y + 1);
   y += rowH;
-  doc.line(labelX, y + 1, leftCol + lineLen, y + 1);
+  doc.line(leftCol + 3, y + 1, leftCol + lineLen, y + 1);
   y += rowH;
 
   // ── Payment Info Fields ──
-  const pLabelX = rightCol + 3;
   const pValueX = rightCol + 28;
   let pY = guestInfoY + 8;
   const pLineLen = halfWidth - 12;
@@ -316,29 +311,24 @@ async function generateRegistrationPdf(stayId: string) {
     }
   }
 
-  return doc;
+  return { doc, guest };
 }
 
 export default function PrintPage() {
   const params = useParams();
   const stayId = params.stayId as string;
 
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [fileName, setFileName] = useState('');
-  const [ready, setReady] = useState(false);
-  const [generating, setGenerating] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const generate = async () => {
-      setGenerating(true);
-      setError(null);
+    let cancelled = false;
 
+    const generate = async () => {
       // Wait for store data to load from Supabase
       const waitForData = () => new Promise<void>((resolve) => {
         const check = () => {
-          const { stays, guests, rooms, settings, dataLoaded } = useMotelStore.getState();
-          if (dataLoaded && stays.some(s => s.id === stayId) && guests.some(g => g.id === stays.find(s => s.id === stayId)?.guestId) && settings) {
+          const { stays, guests, dataLoaded } = useMotelStore.getState();
+          if (dataLoaded && stays.some(s => s.id === stayId) && guests.some(g => g.id === stays.find(s => s.id === stayId)?.guestId)) {
             resolve();
           } else {
             setTimeout(check, 100);
@@ -349,46 +339,24 @@ export default function PrintPage() {
 
       try {
         await waitForData();
-        const doc = await generateRegistrationPdf(stayId);
-        const blob = doc.output('blob');
-        const url = URL.createObjectURL(blob);
-        setPdfUrl(url);
-
-        const stay = useMotelStore.getState().stays.find(s => s.id === stayId);
-        const guest = useMotelStore.getState().guests.find(g => g.id === stay?.guestId);
-        setFileName(`registration_${guest?.lastName || 'guest'}_${stay?.checkInDate || ''}`);
-        setReady(true);
+        const { doc, guest } = await generateRegistrationPdf(stayId);
+        if (!cancelled) {
+          const fileName = `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest';
+          doc.save(`${fileName}.Registration.pdf`);
+          window.close();
+        }
       } catch (err) {
         console.error(err);
-        setError(err instanceof Error ? err.message : 'Failed to generate PDF');
-      } finally {
-        setGenerating(false);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to generate PDF');
+        }
       }
     };
 
     generate();
+
+    return () => { cancelled = true; };
   }, [stayId]);
-
-  const handleDownload = () => {
-    if (!pdfUrl || !fileName) return;
-    const a = document.createElement('a');
-    a.href = pdfUrl;
-    a.download = `${fileName}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  if (generating || !ready) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 text-muted-foreground animate-spin mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground">Generating registration form...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (error) {
     return (
@@ -404,45 +372,10 @@ export default function PrintPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Top bar with filename input and download button */}
-      <div className="bg-white border-b border-border px-4 py-3 flex items-center gap-3 flex-wrap">
-        <FileText className="w-5 h-5 text-muted-foreground" />
-        <span className="text-sm font-semibold text-foreground">Registration Form Preview</span>
-        <div className="flex-1" />
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={fileName}
-            onChange={(e) => setFileName(e.target.value)}
-            className="px-3 py-1.5 border border-input rounded-md text-sm w-[280px] outline-none focus:ring-2 focus:ring-ring"
-          />
-          <span className="text-sm text-muted-foreground">.pdf</span>
-        </div>
-        <button
-          onClick={handleDownload}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Download className="w-4 h-4" />
-          Download PDF
-        </button>
-        <button
-          onClick={() => window.close()}
-          className="px-4 py-2 bg-transparent text-muted-foreground border border-input rounded-lg text-sm hover:bg-accent transition-colors"
-        >
-          Close
-        </button>
-      </div>
-
-      {/* PDF Preview */}
-      <div className="flex-1 p-5 flex justify-center">
-        {pdfUrl && (
-          <iframe
-            src={pdfUrl}
-            className="w-full max-w-[900px] border-none rounded-lg shadow-md"
-            style={{ height: 'calc(100vh - 80px)' }}
-          />
-        )}
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="text-center">
+        <Loader2 className="w-8 h-8 text-muted-foreground animate-spin mx-auto mb-4" />
+        <p className="text-sm text-muted-foreground">Generating registration form...</p>
       </div>
     </div>
   );
