@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/table';
 import { useMotelStore } from '@/lib/store';
 import { toast } from 'sonner';
+import AnimateOnScroll from '@/components/ui/animate-on-scroll';
 import type { Guest } from '@/lib/types';
 
 export default function Guests() {
@@ -224,7 +225,8 @@ export default function Guests() {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <AnimateOnScroll>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4 flex items-center gap-4">
             <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center">
@@ -259,6 +261,7 @@ export default function Guests() {
           </CardContent>
         </Card>
       </div>
+      </AnimateOnScroll>
 
       {/* Filters */}
       <Card className="no-print">
@@ -304,7 +307,8 @@ export default function Guests() {
       </Card>
 
       {/* History Table */}
-      <div id="print-area">
+      <AnimateOnScroll delay={200}>
+        <div id="print-area">
         <div className="mb-4 hidden print:block text-center">
           <h1 className="text-xl font-bold">Airway Motel - Guest History Report</h1>
           <p className="text-sm text-gray-500">Generated on {new Date().toLocaleDateString()}</p>
@@ -400,6 +404,7 @@ export default function Guests() {
           </div>
         </Card>
       </div>
+      </AnimateOnScroll>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

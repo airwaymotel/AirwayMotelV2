@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useMotelStore } from '@/lib/store';
 import { toast } from 'sonner';
 import RoomCard from './room-card';
+import AnimateOnScroll from '@/components/ui/animate-on-scroll';
 import type { Room, RoomType, RoomStatus } from '@/lib/types';
 
 const FILTERS = ['All', 'Available', 'Occupied', 'Needs Attention'] as const;
@@ -66,6 +67,9 @@ export default function Rooms() {
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Refresh state
+  const [refreshing, setRefreshing] = useState(false);
 
   // Settings modal
   const [showSettings, setShowSettings] = useState(false);
@@ -218,8 +222,12 @@ export default function Rooms() {
             ))}
           </div>
 
-          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => useMotelStore.getState().loadFromSupabase()}>
-            <RotateCcw className="w-4 h-4" />
+          <Button variant="outline" size="icon" className="h-9 w-9" onClick={async () => {
+            setRefreshing(true);
+            await useMotelStore.getState().loadFromSupabase();
+            setRefreshing(false);
+          }}>
+            <RotateCcw className={`w-4 h-4 ${refreshing ? 'animate-spin-slow' : ''}`} />
           </Button>
 
           {/* Settings Button */}
@@ -252,16 +260,18 @@ export default function Rooms() {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-            {filteredRooms.map((room) => (
-              <RoomCard
-                key={room.id}
-                room={room}
-                activeStay={getActiveStayForRoom(room.id)}
-                onClick={() => { setSelectedRoom(room); setEditing(false); }}
-              />
-            ))}
-          </div>
+          <AnimateOnScroll>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              {filteredRooms.map((room) => (
+                <RoomCard
+                  key={room.id}
+                  room={room}
+                  activeStay={getActiveStayForRoom(room.id)}
+                  onClick={() => { setSelectedRoom(room); setEditing(false); }}
+                />
+              ))}
+            </div>
+          </AnimateOnScroll>
         </div>
       )}
 

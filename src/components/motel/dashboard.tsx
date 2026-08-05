@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import AnimateOnScroll from '@/components/ui/animate-on-scroll';
 
 export default function Dashboard() {
   const rooms = useMotelStore((s) => s.rooms);
@@ -72,49 +73,60 @@ export default function Dashboard() {
 
   return (
     <div className="p-4 lg:p-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-foreground">Operations Overview</h2>
-        <p className="text-muted-foreground mt-1">
-          {greeting}, Admin. Here is what is happening at Airway Motel today.
-        </p>
-      </div>
+      <AnimateOnScroll>
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-foreground">Operations Overview</h2>
+          <p className="text-muted-foreground mt-1">
+            {greeting}, Admin. Here is what is happening at Airway Motel today.
+          </p>
+        </div>
+      </AnimateOnScroll>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          title="Rooms Occupied"
-          value={occupied}
-          badgeText={`${occPercent}% Full`}
-          icon={DoorClosed}
-          tone="warning"
-        />
-        <StatCard
-          title="Rooms Free"
-          value={available}
-          badgeText={`${availPercent}% Avail`}
-          icon={DoorOpen}
-          tone="success"
-        />
-        <StatCard
-          title="Check-outs Today"
-          value={checkoutsToday.length}
-          badgeText="Due 10 AM"
-          icon={LogOut}
-          tone="destructive"
-        />
-        <StatCard
-          title="Today's Revenue"
-          value={`$${revenue}`}
-          badgeText="+12% vs yest"
-          icon={DollarSign}
-          isInverse
-        />
+        <AnimateOnScroll delay={0}>
+          <StatCard
+            title="Rooms Occupied"
+            value={occupied}
+            badgeText={`${occPercent}% Full`}
+            icon={DoorClosed}
+            tone="warning"
+          />
+        </AnimateOnScroll>
+        <AnimateOnScroll delay={100}>
+          <StatCard
+            title="Rooms Free"
+            value={available}
+            badgeText={`${availPercent}% Avail`}
+            icon={DoorOpen}
+            tone="success"
+          />
+        </AnimateOnScroll>
+        <AnimateOnScroll delay={200}>
+          <StatCard
+            title="Check-outs Today"
+            value={checkoutsToday.length}
+            badgeText="Due 10 AM"
+            icon={LogOut}
+            tone="destructive"
+          />
+        </AnimateOnScroll>
+        <AnimateOnScroll delay={300}>
+          <StatCard
+            title="Today's Revenue"
+            value={`$${revenue}`}
+            badgeText="+12% vs yest"
+            icon={DollarSign}
+            isInverse
+          />
+        </AnimateOnScroll>
       </div>
 
       {/* Activity + Upcoming Checkouts */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Recent Activity */}
-        <Card className="lg:col-span-8">
+        <AnimateOnScroll delay={200} className="lg:col-span-8">
+          <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
             <button className="text-xs text-muted-foreground hover:text-foreground font-semibold uppercase cursor-pointer">
@@ -168,9 +180,11 @@ export default function Dashboard() {
             </Table>
           </CardContent>
         </Card>
+        </AnimateOnScroll>
 
         {/* Upcoming Checkouts */}
-        <Card className="lg:col-span-4 flex flex-col">
+        <AnimateOnScroll delay={300} className="lg:col-span-4">
+          <Card className="flex flex-col">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">Upcoming Check-outs</CardTitle>
           </CardHeader>
@@ -202,6 +216,7 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
+        </AnimateOnScroll>
       </div>
     </div>
   );
