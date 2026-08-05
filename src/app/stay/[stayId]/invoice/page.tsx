@@ -50,9 +50,9 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   doc.setFont('courier', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(60, 60, 60);
-  doc.text('123 Motel Way, Denver, CO 80202', centerX, y, { align: 'center' });
+  doc.text('8339 E Colfax Ave, Denver, CO 80220', centerX, y, { align: 'center' });
   y += 5;
-  doc.text('Tel. (555) 123-4567', centerX, y, { align: 'center' });
+  doc.text('Tel. (303) 420-8998', centerX, y, { align: 'center' });
   y += 7;
 
   // Asterisk divider

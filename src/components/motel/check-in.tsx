@@ -1023,6 +1023,7 @@ const STEPS = [
             <CardContent className="space-y-4">
               <div className="bg-muted/30 rounded-lg p-4 text-xs text-muted-foreground space-y-2 max-h-48 overflow-y-auto">
                 <p className="font-semibold text-foreground text-sm mb-2">Airway Motel — Terms and Conditions</p>
+                <p className="text-[11px]">8339 E Colfax Ave, Denver, CO 80220 | (303) 420-8998</p>
                 <p>By signing below, as a guest of AIRWAY MOTEL you state that you have fully read the statements below and agree to abide by them.</p>
                  <ol className="list-decimal list-inside space-y-1.5 mt-2">
                    <li>Checkout time is 10 AM on date of checkout.</li>
