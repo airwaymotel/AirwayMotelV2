@@ -296,7 +296,7 @@ const STEPS = [
   const subtotal = rate * nights;
   const vatAmount = motelSettings.vatEnabled ? subtotal * (motelSettings.vatRate / 100) : 0;
   const weeklyDiscount = motelSettings.weeklyDiscountEnabled && nights >= 7 ? motelSettings.weeklyDiscountAmount : 0;
-  const totalDue = subtotal + vatAmount - weeklyDiscount + 20;
+  const totalDue = subtotal + vatAmount - weeklyDiscount;
 
   // ── Manual file upload handler ──
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -460,8 +460,6 @@ const STEPS = [
          checkOutTime,
          rateAmount: rate,
          status: 'active',
-         keyDeposit: 10,
-         tvRemoteDeposit: 10,
        });
 
        await addPayment({
@@ -488,13 +486,6 @@ const STEPS = [
            description: 'Weekly discount',
          });
        }
-
-       await addPayment({
-         stayId,
-         amount: 20,
-         method: paymentMethod,
-         description: 'Key + TV remote deposit',
-       });
 
       updateRoomStatus(selectedRoomId, 'occupied');
 
@@ -1005,27 +996,19 @@ const STEPS = [
                      </div>
                    </>
                  )}
-                 {weeklyDiscount > 0 && (
-                   <>
-                     <div className="flex justify-between text-sm">
-                       <span>Weekly Discount</span>
-                       <span className="font-medium text-green-600 dark:text-green-400">-${weeklyDiscount.toFixed(2)}</span>
-                     </div>
-                   </>
-                 )}
-                 <div className="flex justify-between text-sm">
-                   <span>Key Deposit</span>
-                   <span className="font-medium">$10</span>
-                 </div>
-                 <div className="flex justify-between text-sm">
-                   <span>TV Remote Deposit</span>
-                   <span className="font-medium">$10</span>
-                 </div>
-                 <Separator />
-                 <div className="flex justify-between text-base font-semibold">
-                   <span>Total Due</span>
-                   <span>${totalDue.toFixed(2)}</span>
-                 </div>
+                  {weeklyDiscount > 0 && (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span>Weekly Discount</span>
+                        <span className="font-medium text-green-600 dark:text-green-400">-${weeklyDiscount.toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
+                  <Separator />
+                  <div className="flex justify-between text-base font-semibold">
+                    <span>Total Due</span>
+                    <span>${totalDue.toFixed(2)}</span>
+                  </div>
                </div>
             </CardContent>
           </Card>
@@ -1041,16 +1024,15 @@ const STEPS = [
               <div className="bg-muted/30 rounded-lg p-4 text-xs text-muted-foreground space-y-2 max-h-48 overflow-y-auto">
                 <p className="font-semibold text-foreground text-sm mb-2">Airway Motel — Terms and Conditions</p>
                 <p>By signing below, as a guest of AIRWAY MOTEL you state that you have fully read the statements below and agree to abide by them.</p>
-                <ol className="list-decimal list-inside space-y-1.5 mt-2">
-                  <li>Checkout time is 10 AM on date of checkout.</li>
-                  <li>A fee of $10 per hour will be assessed for each hour past checkout time.</li>
-                  <li>Deposits for key and T.V. remote will not be returned unless each is returned in serviceable condition.</li>
-                  <li>Guests may request refund of room rent and deposits within five (5) minutes of check-in if room unsatisfactory.</li>
-                  <li>No illicit drug activity, solicitation, illegal weapon possession, or dangerous activities tolerated.</li>
-                  <li>Management reserves the right to evict any guest at any time without refund for policy violations.</li>
-                  <li>Management reserves the right to enter any room at any time for inspection or repairs.</li>
-                  <li>Airway Motel assumes no responsibility for lost, stolen, or damaged personal items.</li>
-                </ol>
+                 <ol className="list-decimal list-inside space-y-1.5 mt-2">
+                   <li>Checkout time is 10 AM on date of checkout.</li>
+                   <li>A fee of $10 per hour will be assessed for each hour past checkout time.</li>
+                   <li>Guests may request refund of room rent within five (5) minutes of check-in if room unsatisfactory.</li>
+                   <li>No illicit drug activity, solicitation, illegal weapon possession, or dangerous activities tolerated.</li>
+                   <li>Management reserves the right to evict any guest at any time without refund for policy violations.</li>
+                   <li>Management reserves the right to enter any room at any time for inspection or repairs.</li>
+                   <li>Airway Motel assumes no responsibility for lost, stolen, or damaged personal items.</li>
+                 </ol>
               </div>
 
               <div className="flex items-start gap-3">

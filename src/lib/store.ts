@@ -57,8 +57,6 @@ function mapStayFromDb(row: Record<string, unknown>): Stay {
     checkOutTime: row.check_out_time ? String(row.check_out_time) : '',
     rateAmount: Number(row.rate_amount) || 0,
     status: row.status as Stay['status'],
-    keyDeposit: Number(row.key_deposit) || 10,
-    tvRemoteDeposit: Number(row.tv_remote_deposit) || 10,
     createdAt: row.created_at as string,
   };
 }
@@ -103,21 +101,17 @@ const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString().split('T')[0];
 
 const MOCK_STAYS: Stay[] = [
-  { id: 'stay-1', guestId: 'guest-1', roomId: 'room-101', checkInDate: twoDaysAgo, checkInTime: '2:00 PM', checkOutDate: today, checkOutTime: '10:00 AM', rateAmount: 80, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: twoDaysAgo + 'T14:00:00Z' },
-  { id: 'stay-2', guestId: 'guest-2', roomId: 'room-103', checkInDate: twoDaysAgo, checkInTime: '3:30 PM', checkOutDate: today, checkOutTime: '10:00 AM', rateAmount: 100, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: twoDaysAgo + 'T15:30:00Z' },
-  { id: 'stay-3', guestId: 'guest-3', roomId: 'room-201', checkInDate: today, checkInTime: '11:00 AM', checkOutDate: tomorrow, checkOutTime: '10:00 AM', rateAmount: 80, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: today + 'T11:00:00Z' },
-  { id: 'stay-4', guestId: 'guest-4', roomId: 'room-301', checkInDate: today, checkInTime: '1:00 PM', checkOutDate: tomorrow, checkOutTime: '10:00 AM', rateAmount: 100, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: today + 'T13:00:00Z' },
+  { id: 'stay-1', guestId: 'guest-1', roomId: 'room-101', checkInDate: twoDaysAgo, checkInTime: '2:00 PM', checkOutDate: today, checkOutTime: '10:00 AM', rateAmount: 80, status: 'active', createdAt: twoDaysAgo + 'T14:00:00Z' },
+  { id: 'stay-2', guestId: 'guest-2', roomId: 'room-103', checkInDate: twoDaysAgo, checkInTime: '3:30 PM', checkOutDate: today, checkOutTime: '10:00 AM', rateAmount: 100, status: 'active', createdAt: twoDaysAgo + 'T15:30:00Z' },
+  { id: 'stay-3', guestId: 'guest-3', roomId: 'room-201', checkInDate: today, checkInTime: '11:00 AM', checkOutDate: tomorrow, checkOutTime: '10:00 AM', rateAmount: 80, status: 'active', createdAt: today + 'T11:00:00Z' },
+  { id: 'stay-4', guestId: 'guest-4', roomId: 'room-301', checkInDate: today, checkInTime: '1:00 PM', checkOutDate: tomorrow, checkOutTime: '10:00 AM', rateAmount: 100, status: 'active', createdAt: today + 'T13:00:00Z' },
 ];
 
 const MOCK_PAYMENTS: Payment[] = [
   { id: 'pay-1', stayId: 'stay-1', amount: 80, method: 'card', description: 'Room charge (1 night)', paidAt: twoDaysAgo + 'T14:00:00Z' },
-  { id: 'pay-2', stayId: 'stay-1', amount: 20, method: 'cash', description: 'Key + TV remote deposit', paidAt: twoDaysAgo + 'T14:00:00Z' },
   { id: 'pay-3', stayId: 'stay-2', amount: 100, method: 'cash', description: 'Room charge (1 night)', paidAt: twoDaysAgo + 'T15:30:00Z' },
-  { id: 'pay-4', stayId: 'stay-2', amount: 20, method: 'cash', description: 'Key + TV remote deposit', paidAt: twoDaysAgo + 'T15:30:00Z' },
   { id: 'pay-5', stayId: 'stay-3', amount: 80, method: 'card', description: 'Room charge (1 night)', paidAt: today + 'T11:00:00Z' },
-  { id: 'pay-6', stayId: 'stay-3', amount: 20, method: 'card', description: 'Key + TV remote deposit', paidAt: today + 'T11:00:00Z' },
   { id: 'pay-7', stayId: 'stay-4', amount: 100, method: 'debit', description: 'Room charge (1 night)', paidAt: today + 'T13:00:00Z' },
-  { id: 'pay-8', stayId: 'stay-4', amount: 20, method: 'debit', description: 'Key + TV remote deposit', paidAt: today + 'T13:00:00Z' },
 ];
 
 const MOCK_ACTIVITY: ActivityLog[] = [
@@ -407,8 +401,6 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
         check_out_date: stayData.checkOutDate,
         check_out_time: stayData.checkOutTime,
         status: 'active',
-        key_deposit: stayData.keyDeposit,
-        tv_remote_deposit: stayData.tvRemoteDeposit,
       });
 
       if (result?.id) {

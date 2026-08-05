@@ -101,8 +101,6 @@ export default function PrintRegistrationPage() {
               checkOutTime: stayRow.check_out_time,
               rateAmount: stayRow.rate_amount,
               status: stayRow.status,
-              keyDeposit: stayRow.key_deposit,
-              tvRemoteDeposit: stayRow.tv_remote_deposit,
               createdAt: stayRow.created_at,
             };
 
@@ -226,14 +224,6 @@ export default function PrintRegistrationPage() {
               <span className="font-bold">DAILY/WEEKLY RATE $</span>
               <span className="form-field w-32">{stay.rateAmount}</span>
             </div>
-            <div className="flex items-end justify-between">
-              <span className="font-bold">KEY DEPOSIT $</span>
-              <span className="form-field w-32">{stay.keyDeposit || 10}</span>
-            </div>
-            <div className="flex items-end justify-between">
-              <span className="font-bold">T.V. REMOTE DEPOSIT $</span>
-              <span className="form-field w-32">{stay.tvRemoteDeposit || 10}</span>
-            </div>
             <div className="flex items-center justify-end gap-6 pt-1">
               <label className="flex items-center gap-1 font-bold">
                 CASH
@@ -291,8 +281,7 @@ export default function PrintRegistrationPage() {
         <ol className="list-decimal pl-6 space-y-2 mb-8 text-[12px]">
           <li>Checkout time is 10 AM on date of checkout.</li>
           <li>A fee of $10 dollars per hour will be assessed for each hour guest stays past checkout time.</li>
-          <li>Deposits for key and T.V. remote will not be returned unless each is returned in serviceable condition.</li>
-          <li>Guests may request refund of room rent and deposits for key and T.V remote, within five (5) minutes of check-in time if room unsatisfactory. NO refunds will be given outside this time for any reason.</li>
+          <li>Guests may request refund of room rent within five (5) minutes of check-in time if room unsatisfactory. NO refunds will be given outside this time for any reason.</li>
           <li>The following WILL NOT be tolerated during your stay at AIRWAY MOTEL, for any reason: Illicit drug activity, solicitation (prostitution), illegal weapon possession, or any activities that would pose a danger to guests, staff, general public or in violation of any state/county/city municipal code.</li>
           <li>Management reserves the right to EVICT any guest or visitors AT ANY TIME, without refund, for any damage to property, harassment of other guests or staff, causing harm to others, refusal to pay rent fees, allowing/having unregistered visitors in room, participating in any illegal or suspicious activities or any other management policies/verbal directions. Any person(s) can be barred from entering AIRWAY MOTEL property at any time.</li>
           <li>Management reserves the right to enter any room at any time, for inspection, for repairs, for cleaning, pest control measures, or other actions to maintain room/facilities. Management/staff will knock before entering room.</li>

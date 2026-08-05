@@ -16,8 +16,7 @@ const TERMS_HEADER =
 const TERMS = [
   'Checkout time is 10 AM on date of checkout.',
   'A fee of $10 per hour will be assessed for each hour guest stays past checkout time.',
-  'Deposits for key and T.V. remote will not be returned unless each is returned in serviceable condition.',
-  'Guests may request refund of room rent and deposits within five (5) minutes of check-in if room unsatisfactory.',
+  'Guests may request refund of room rent within five (5) minutes of check-in if room unsatisfactory.',
   'No illicit drug activity, solicitation, illegal weapon possession, or dangerous activities tolerated.',
   'Management reserves the right to evict any guest at any time without refund for policy violations.',
   'Management reserves the right to enter any room at any time for inspection or repairs.',

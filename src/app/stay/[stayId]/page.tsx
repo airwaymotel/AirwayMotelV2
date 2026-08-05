@@ -116,8 +116,6 @@ export default function StayDetailsPage() {
               checkOutTime: stayRow.check_out_time,
               rateAmount: stayRow.rate_amount,
               status: stayRow.status,
-              keyDeposit: stayRow.key_deposit,
-              tvRemoteDeposit: stayRow.tv_remote_deposit,
               createdAt: stayRow.created_at,
             };
 
@@ -329,16 +327,6 @@ export default function StayDetailsPage() {
               </div>
             </div>
             <Separator className="my-4" />
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase">Key Deposit</p>
-                <p className="text-sm font-medium">${stay.keyDeposit}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase">TV Remote Deposit</p>
-                <p className="text-sm font-medium">${stay.tvRemoteDeposit}</p>
-              </div>
-            </div>
           </div>
         </div>
 

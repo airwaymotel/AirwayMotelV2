@@ -67,8 +67,6 @@ export default function InvoicePage() {
                 checkOutTime: stayRow.check_out_time,
                 rateAmount: stayRow.rate_amount,
                 status: stayRow.status,
-                keyDeposit: stayRow.key_deposit,
-                tvRemoteDeposit: stayRow.tv_remote_deposit,
                 createdAt: stayRow.created_at,
               };
 
@@ -154,7 +152,7 @@ export default function InvoicePage() {
   const end = new Date(stay.checkOutDate);
   const nights = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
   const roomTotal = stay.rateAmount * nights;
-  const grandTotal = roomTotal + stay.keyDeposit + stay.tvRemoteDeposit;
+  const grandTotal = roomTotal;
 
   return (
     <div className="min-h-screen bg-zinc-100 py-8 print:py-0 print:bg-white text-black font-sans">
@@ -212,18 +210,6 @@ export default function InvoicePage() {
               <td className="py-4 text-zinc-800">Room Rate ({nights} Night{nights > 1 ? 's' : ''} @ ${stay.rateAmount}/night)</td>
               <td className="py-4 text-zinc-800 text-right font-medium">${roomTotal.toFixed(2)}</td>
             </tr>
-            {stay.keyDeposit > 0 && (
-              <tr className="border-b border-zinc-200">
-                <td className="py-4 text-zinc-800">Key Deposit (Refundable)</td>
-                <td className="py-4 text-zinc-800 text-right font-medium">${stay.keyDeposit.toFixed(2)}</td>
-              </tr>
-            )}
-            {stay.tvRemoteDeposit > 0 && (
-              <tr className="border-b border-zinc-200">
-                <td className="py-4 text-zinc-800">T.V. Remote Deposit (Refundable)</td>
-                <td className="py-4 text-zinc-800 text-right font-medium">${stay.tvRemoteDeposit.toFixed(2)}</td>
-              </tr>
-            )}
           </tbody>
         </table>
 
@@ -251,7 +237,6 @@ export default function InvoicePage() {
         {/* Footer */}
         <div className="mt-16 text-center text-sm text-zinc-400">
           <p>Please retain this receipt for your records.</p>
-          <p>Key and T.V. Remote deposits are refunded upon checkout, provided items are returned in serviceable condition.</p>
         </div>
       </div>
     </div>

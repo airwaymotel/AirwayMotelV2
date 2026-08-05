@@ -126,8 +126,6 @@ export default function GuestDetailsPage() {
               checkOutTime: row.check_out_time as string,
               rateAmount: Number(row.rate_amount) || 0,
               status: row.status as Stay['status'],
-              keyDeposit: Number(row.key_deposit) || 10,
-              tvRemoteDeposit: Number(row.tv_remote_deposit) || 10,
               createdAt: row.created_at as string,
             };
 

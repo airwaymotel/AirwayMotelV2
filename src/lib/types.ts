@@ -35,8 +35,6 @@ export interface Stay {
   checkOutTime: string;
   rateAmount: number;
   status: StayStatus;
-  keyDeposit: number;
-  tvRemoteDeposit: number;
   createdAt: string;
 }
 
