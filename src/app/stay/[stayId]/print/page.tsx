@@ -31,7 +31,7 @@ async function generateRegistrationPdf(stayId: string) {
   if (!guest) throw new Error('Guest not found');
   const room = useMotelStore.getState().rooms.find(r => r.id === stay.roomId);
   if (!room) throw new Error('Room not found');
-  const settings = useMotelStore.getState().settings;
+  const settings = useMotelStore.getState().settings || {};
 
   let idBase64: string | null = null;
   if (guest.idPhotoUrl) {
@@ -178,14 +178,14 @@ async function generateRegistrationPdf(stayId: string) {
   doc.line(pValueX, pY + 1, rightCol + pLineLen, pY + 1);
   pY += rowH;
 
-  if (settings.vatEnabled) {
+  if (settings?.vatEnabled) {
     doc.text('VAT (10.75%):', rightCol, pY);
     doc.text('$' + ((stay.rateAmount * nights) * 0.1075).toFixed(2), pValueX, pY);
     doc.line(pValueX, pY + 1, rightCol + pLineLen, pY + 1);
     pY += rowH;
   }
 
-  if (settings.weeklyDiscountEnabled && nights >= 7) {
+  if (settings?.weeklyDiscountEnabled && nights >= 7) {
     doc.text('Weekly Discount:', rightCol, pY);
     doc.text('-$200.00', pValueX, pY);
     doc.line(pValueX, pY + 1, rightCol + pLineLen, pY + 1);
@@ -337,8 +337,8 @@ export default function PrintPage() {
       // Wait for store data to load from Supabase
       const waitForData = () => new Promise<void>((resolve) => {
         const check = () => {
-          const { stays, guests, rooms, dataLoaded } = useMotelStore.getState();
-          if (dataLoaded && stays.some(s => s.id === stayId) && guests.some(g => g.id === stays.find(s => s.id === stayId)?.guestId)) {
+          const { stays, guests, rooms, settings, dataLoaded } = useMotelStore.getState();
+          if (dataLoaded && stays.some(s => s.id === stayId) && guests.some(g => g.id === stays.find(s => s.id === stayId)?.guestId) && settings) {
             resolve();
           } else {
             setTimeout(check, 100);
