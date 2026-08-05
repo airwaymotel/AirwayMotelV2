@@ -35,13 +35,29 @@ const TERMS = [
   'Any tenant who commits, conducts, facilitates, allows, permits, or fails on Airway Motel property any public nuisance as defined in section 37-50 (c) or (d) of the Denver Revised Municipal Code, or any other activity prohibited by law or the Denver Revised Municipal Code shall be subject to immediate eviction.',
 ];
 
-function generateRegistrationPdf(data: PrintData): jsPDF {
+// Fetch an image URL and convert to base64 data URL
+async function imageToBase64(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function generateRegistrationPdf(data: PrintData): Promise<jsPDF> {
   const { stay, guest, room, payments, signatures } = data;
   const doc = new jsPDF({ unit: 'mm', format: 'letter' });
 
   const pageWidth = 215.9;
-  const pageHeight = 279.4;
-  const margin = 15;
+  const margin = 14;
   const contentWidth = pageWidth - margin * 2;
   let y = margin;
 
@@ -50,91 +66,161 @@ function generateRegistrationPdf(data: PrintData): jsPDF {
   const hasCard = payments.some(p => p.method !== 'cash');
   const signatureUrl = signatures.length > 0 ? signatures[0].signature_data_url : null;
 
-  // ── Header: Room + Payment Box ──
+  // ── Load ID image if available ──
+  let idImageBase64: string | null = null;
+  let idImageType: 'JPEG' | 'PNG' = 'JPEG';
+  if (guest.idPhotoUrl) {
+    const base64 = await imageToBase64(guest.idPhotoUrl);
+    if (base64) {
+      idImageBase64 = base64;
+      idImageType = base64.includes('image/png') ? 'PNG' : 'JPEG';
+    }
+  }
+
+  // ── Top Section: ID Image (left) + Payment Box (right) ──
+  const leftColW = contentWidth * 0.48;
+  const rightColW = contentWidth * 0.48;
+  const rightColX = margin + contentWidth * 0.52;
+  const boxHeight = 40;
+
+  // Left: ID Image
   doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.5);
+  doc.setLineWidth(0.4);
+  doc.rect(margin, y, leftColW, boxHeight);
 
-  // Left side: ID placeholder
-  doc.rect(margin, y, contentWidth * 0.45, 35);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text('ID CARD IMAGE', margin + contentWidth * 0.225, y + 17.5, { align: 'center' });
+  if (idImageBase64) {
+    try {
+      // Calculate aspect ratio to fit inside the box
+      const img = new Image();
+      img.src = idImageBase64;
+      // Add image centered in box with padding
+      const padding = 2;
+      doc.addImage(idImageBase64, idImageType, margin + padding, y + padding, leftColW - padding * 2, boxHeight - padding * 2);
+    } catch {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text('ID IMAGE', margin + leftColW / 2, y + boxHeight / 2, { align: 'center' });
+    }
+  } else {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text('ID IMAGE', margin + leftColW / 2, y + boxHeight / 2, { align: 'center' });
+  }
 
-  // Right side: Payment box
-  const boxX = margin + contentWidth * 0.5 + 3;
-  const boxW = contentWidth * 0.5 - 3;
-  doc.rect(boxX, y, boxW, 35);
+  // Right: Payment Box
+  doc.setLineWidth(0.4);
+  doc.rect(rightColX, y, rightColW, boxHeight);
 
-  let innerY = y + 6;
+  let innerY = y + 7;
+  const lineSpacing = 7.5;
+  const labelX = rightColX + 3;
+  const valueX = rightColX + rightColW - 3;
+
+  // Room number
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(0, 0, 0);
-
-  // Room number
-  doc.text('ROOM #', boxX + 3, innerY);
-  doc.text(room.roomNumber || '___', boxX + boxW - 3, innerY, { align: 'right' });
-  innerY += 7;
+  doc.text('ROOM #', labelX, innerY);
+  doc.text(room.roomNumber || '___', valueX, innerY, { align: 'right' });
+  innerY += lineSpacing;
 
   // Rate
-  doc.text('DAILY/WEEKLY RATE $', boxX + 3, innerY);
-  doc.text(String(stay.rateAmount || '___'), boxX + boxW - 3, innerY, { align: 'right' });
-  innerY += 7;
+  doc.text('DAILY/WEEKLY RATE $', labelX, innerY);
+  doc.text(String(stay.rateAmount || '___'), valueX, innerY, { align: 'right' });
+  innerY += lineSpacing;
 
   // Cash/Credit checkboxes
   doc.setFontSize(8);
-  const checkX = boxX + boxW - 30;
-  doc.text('CASH', checkX - 15, innerY);
-  doc.rect(checkX - 8, innerY - 3, 3, 3);
-  if (hasCash) doc.text('X', checkX - 7.5, innerY - 0.5);
-  doc.text('CREDIT', checkX + 5, innerY);
-  doc.rect(checkX + 12, innerY - 3, 3, 3);
-  if (hasCard) doc.text('X', checkX + 12.5, innerY - 0.5);
-  innerY += 7;
+  const checkY = innerY;
+  doc.text('CASH', labelX, checkY);
+  doc.rect(labelX + 12, checkY - 3, 3.5, 3.5);
+  if (hasCash) {
+    doc.setFont('helvetica', 'bold');
+    doc.text('X', labelX + 13, checkY - 0.2);
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('CREDIT', labelX + 22, checkY);
+  doc.rect(labelX + 36, checkY - 3, 3.5, 3.5);
+  if (hasCard) {
+    doc.text('X', labelX + 37, checkY - 0.2);
+  }
+  innerY += lineSpacing;
 
   // Total
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.text('TOTAL AMOUNT PAID $', boxX + 3, innerY);
-  doc.text(String(totalAmount || '___'), boxX + boxW - 3, innerY, { align: 'right' });
+  doc.text('TOTAL AMOUNT PAID $', labelX, innerY);
+  doc.text(String(totalAmount || '___'), valueX, innerY, { align: 'right' });
 
-  y += 40;
+  y += boxHeight + 6;
 
   // ── Dates Row ──
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  const dateY = y;
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
 
-  doc.text('CHECK-IN DATE', margin, dateY);
-  doc.rect(margin + 25, dateY - 3.5, 30, 5);
-  doc.text(stay.checkInDate || '___', margin + 27.5, dateY, { align: 'center' });
+  const dateFieldW = 28;
+  const timeFieldW = 18;
+  let dx = margin;
 
-  doc.text('CHECK-IN TIME', margin + 60, dateY);
-  doc.rect(margin + 80, dateY - 3.5, 20, 5);
-  doc.text(stay.checkInTime || '___', margin + 82.5, dateY, { align: 'center' });
+  doc.text('CHECK-IN DATE', dx, y);
+  dx += 24;
+  doc.rect(dx, y - 3.5, dateFieldW, 5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(stay.checkInDate || '', dx + 1, y);
+  dx += dateFieldW + 3;
 
-  doc.text('CHECK-OUT DATE', margin + 105, dateY);
-  doc.rect(margin + 125, dateY - 3.5, 30, 5);
-  doc.text(stay.checkOutDate || '___', margin + 127.5, dateY, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.text('CHECK-IN TIME', dx, y);
+  dx += 22;
+  doc.rect(dx, y - 3.5, timeFieldW, 5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(stay.checkInTime || '', dx + 1, y);
+  dx += timeFieldW + 3;
 
-  doc.text('CHECK-OUT TIME', margin + 160, dateY);
-  doc.rect(margin + 178, dateY - 3.5, 18, 5);
-  doc.text('10 AM', margin + 180, dateY, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.text('CHECK-OUT DATE', dx, y);
+  dx += 24;
+  doc.rect(dx, y - 3.5, dateFieldW, 5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(stay.checkOutDate || '', dx + 1, y);
+  dx += dateFieldW + 3;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('CHECK-OUT TIME', dx, y);
+  dx += 22;
+  doc.rect(dx, y - 3.5, timeFieldW, 5);
+  doc.setFont('helvetica', 'normal');
+  doc.text('10 AM', dx + 1, y);
 
   y += 10;
 
   // ── Vehicle Row ──
-  doc.text('VEHICLE INFO:', margin, y);
-  doc.text('MAKE', margin + 25, y);
-  doc.rect(margin + 33, y - 3.5, 22, 5);
-  doc.text('MODEL', margin + 60, y);
-  doc.rect(margin + 69, y - 3.5, 22, 5);
-  doc.text('LICENSE #', margin + 96, y);
-  doc.rect(margin + 111, y - 3.5, 22, 5);
-  doc.text('COLOR', margin + 138, y);
-  doc.rect(margin + 146, y - 3.5, 18, 5);
-  doc.text('YEAR', margin + 169, y);
-  doc.rect(margin + 176, y - 3.5, 18, 5);
+  dx = margin;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+
+  const vehicleFields = [
+    { label: 'MAKE', w: 28 },
+    { label: 'MODEL', w: 28 },
+    { label: 'LICENSE #', w: 28 },
+    { label: 'COLOR', w: 22 },
+    { label: 'YEAR', w: 18 },
+  ];
+
+  doc.text('VEHICLE INFO:', dx, y);
+  dx += 22;
+
+  vehicleFields.forEach((field) => {
+    doc.text(field.label, dx, y);
+    dx += field.label.length * 2 + 2;
+    doc.rect(dx, y - 3.5, field.w, 5);
+    dx += field.w + 3;
+  });
 
   y += 10;
 
@@ -145,54 +231,72 @@ function generateRegistrationPdf(data: PrintData): jsPDF {
   const agreementText = 'By signing below, as a guest of AIRWAY MOTEL you state that you have fully read the statements conditions below and agree to abide by them, without exception, while staying at AIRWAY MOTEL.';
   const agreementLines = doc.splitTextToSize(agreementText, contentWidth);
   doc.text(agreementLines, margin, y);
-  y += agreementLines.length * 3.5 + 4;
+  y += agreementLines.length * 3.5 + 3;
 
   // ── Terms ──
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   TERMS.forEach((term, i) => {
-    const termLines = doc.splitTextToSize(`${i + 1}. ${term}`, contentWidth - 5);
-    doc.text(termLines, margin + 3, y);
-    y += termLines.length * 3 + 1.5;
+    const termLines = doc.splitTextToSize(`${i + 1}. ${term}`, contentWidth - 6);
+    doc.text(termLines, margin + 4, y);
+    y += termLines.length * 2.8 + 1;
   });
 
-  y += 6;
+  y += 5;
 
-  // ── Signature Lines ──
+  // ── Signature Line 1 ──
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
 
-  // First signature line
-  doc.text('GUEST SIGNATURE', margin, y);
+  const sigLineStart = margin;
+  const sigLineEnd = margin + 60;
+  const dateLineStart = margin + 65;
+  const dateLineEnd = margin + 95;
+  const phoneLineStart = margin + 100;
+  const phoneLineEnd = pageWidth - margin;
+
+  doc.text('GUEST SIGNATURE', sigLineStart, y);
   doc.setLineWidth(0.3);
-  doc.line(margin + 30, y, margin + 90, y);
+  doc.line(sigLineStart + 28, y, sigLineEnd, y);
 
-  doc.text('DATE', margin + 95, y);
-  doc.line(margin + 105, y, margin + 135, y);
-  doc.text(stay.checkInDate || '___', margin + 107, y - 1);
+  doc.text('DATE', dateLineStart, y);
+  doc.line(dateLineStart + 10, y, dateLineEnd, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.text(stay.checkInDate || '', dateLineStart + 11, y - 1);
 
-  doc.text('PHONE #', margin + 140, y);
-  doc.line(margin + 155, y, margin + contentWidth, y);
-  doc.text(guest.phone || '___', margin + 157, y - 1);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('PHONE #', phoneLineStart, y);
+  doc.line(phoneLineStart + 15, y, phoneLineEnd, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.text(guest.phone || '', phoneLineStart + 16, y - 1);
 
-  // Draw signature image if available
+  // Draw signature image
   if (signatureUrl) {
     try {
-      doc.addImage(signatureUrl, 'PNG', margin + 30, y - 8, 60, 8);
+      doc.addImage(signatureUrl, 'PNG', sigLineStart + 28, y - 7, 50, 7);
     } catch {
-      // Image load failed, leave signature line blank
+      // Image failed to load
     }
   }
 
-  y += 12;
+  y += 14;
 
-  // Second signature line (blank)
-  doc.text('GUEST SIGNATURE', margin, y);
-  doc.line(margin + 30, y, margin + 90, y);
-  doc.text('DATE', margin + 95, y);
-  doc.line(margin + 105, y, margin + 135, y);
-  doc.text('PHONE #', margin + 140, y);
-  doc.line(margin + 155, y, margin + contentWidth, y);
+  // ── Signature Line 2 (blank) ──
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+
+  doc.text('GUEST SIGNATURE', sigLineStart, y);
+  doc.line(sigLineStart + 28, y, sigLineEnd, y);
+
+  doc.text('DATE', dateLineStart, y);
+  doc.line(dateLineStart + 10, y, dateLineEnd, y);
+
+  doc.text('PHONE #', phoneLineStart, y);
+  doc.line(phoneLineStart + 15, y, phoneLineEnd, y);
 
   return doc;
 }
@@ -308,16 +412,15 @@ export default function PrintRegistrationPage() {
   // Generate PDF or trigger print
   useEffect(() => {
     if (data) {
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         try {
           if (isDownload) {
-            const doc = generateRegistrationPdf(data);
+            const doc = await generateRegistrationPdf(data);
             const fileName = `registration_${data.guest.lastName || 'guest'}_${data.room.roomNumber || 'room'}.pdf`;
             doc.save(fileName);
             setGenerating(false);
             setTimeout(() => window.close(), 2000);
           } else {
-            // Print mode: render HTML for print dialog
             setGenerating(false);
             setTimeout(() => window.print(), 300);
           }
