@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   BedSingle, BedDouble, ArrowRight, ArrowLeft, CheckCircle,
   CreditCard, Banknote, Wallet, PenLine, Upload,
-  Camera, Loader2, X, ImageIcon, ScanLine, DoorOpen,
+  Camera, Loader2, X, ImageIcon, ScanLine, DoorOpen, User,
+  AlertCircle, RefreshCcw,
 } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
+import { QRCodeSVG } from 'qrcode.react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +23,181 @@ import { toast } from 'sonner';
 import type { RoomType, PaymentMethod } from '@/lib/types';
 import IdScanner, { type ScannedIdData } from './id-scanner';
 
+// ── Phone Signature Panel ──────────────────────────────────
+// Shows a QR code linking to /scan/{id}?mode=signature.
+// Desktop polls GET /api/scan-session until the phone submits, then fires onReceived.
+
+function PhoneSignaturePanel({
+  onReceived,
+}: {
+  onReceived: (signatureDataUrl: string, termsAccepted: boolean) => void;
+}) {
+  const [sessionId, setSessionId] = useState<string>('');
+  const [scanUrl, setScanUrl] = useState<string>('');
+  const [status, setStatus] = useState<'generating' | 'waiting' | 'received' | 'error'>('generating');
+  const [errorMsg, setErrorMsg] = useState('');
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const onReceivedRef = useRef(onReceived);
+  useEffect(() => {
+    onReceivedRef.current = onReceived;
+  }, [onReceived]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const init = async () => {
+      const id = crypto.randomUUID();
+
+      try {
+        const res = await fetch('/api/scan-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create', sessionId: id, mode: 'signature' }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to create signature session');
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setStatus('error');
+          setErrorMsg(err?.message || 'Failed to create signature session. Please try again.');
+        }
+        return;
+      }
+
+      if (cancelled) return;
+
+      setSessionId(id);
+
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const url = `${origin}/scan/${id}?mode=signature`;
+      setScanUrl(url);
+      setStatus('waiting');
+
+      pollingRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/scan-session?sessionId=${id}`);
+          if (!res.ok) return;
+
+          const data = await res.json();
+
+          if (data.status === 'received') {
+            if (pollingRef.current) {
+              clearInterval(pollingRef.current);
+              pollingRef.current = null;
+            }
+
+            fetch(`/api/scan-session?sessionId=${id}`, { method: 'DELETE' }).catch(() => {});
+
+            if (!cancelled) {
+              setStatus('received');
+              onReceivedRef.current(
+                data.signatureDataUrl || '',
+                !!data.termsAccepted,
+              );
+            }
+          }
+        } catch {
+          // Ignore polling errors, just retry
+        }
+      }, 2000);
+    };
+
+    init();
+
+    return () => {
+      cancelled = true;
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleCancel = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    setStatus('generating');
+    setSessionId('');
+    setScanUrl('');
+  };
+
+  if (status === 'error') {
+    return (
+      <div className="space-y-4">
+        <div className="text-center p-6 bg-red-50 dark:bg-red-900/20 rounded-lg">
+          <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-3" />
+          <p className="text-sm text-red-600 dark:text-red-400 mb-2">{errorMsg}</p>
+          <Button variant="outline" size="sm" onClick={() => { setStatus('generating'); setErrorMsg(''); }}>
+            <RefreshCcw className="w-4 h-4 mr-1" /> Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col items-center gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-md">
+          {scanUrl && (
+            <QRCodeSVG
+              value={scanUrl}
+              size={200}
+              level="M"
+              includeMargin={false}
+              bgColor="#FFFFFF"
+              fgColor="#000000"
+            />
+          )}
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-sm font-medium">Scan with your phone</p>
+          <p className="text-xs text-muted-foreground">
+            Open the link on your phone to read the terms and sign the agreement.
+          </p>
+        </div>
+      </div>
+
+      {status === 'waiting' && (
+        <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+          <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse shrink-0" />
+          <div className="flex-1">
+            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Waiting for phone signature...</p>
+            <p className="text-[11px] text-amber-600/70 dark:text-amber-400/60">
+              Scan the QR code with your phone, read the terms, and sign.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {status === 'received' && (
+        <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+          <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+          <div className="flex-1">
+            <p className="text-xs font-medium text-green-700 dark:text-green-400">Signature received!</p>
+            <p className="text-[11px] text-green-600/70 dark:text-green-400/60">
+              The signature has been applied to the form.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {status === 'waiting' && (
+        <Button variant="outline" size="sm" className="w-full" onClick={handleCancel}>
+          <X className="w-4 h-4 mr-2" /> Cancel
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export default function CheckIn() {
 const STEPS = [
   'Room',
   'Scan ID',
@@ -30,8 +207,8 @@ const STEPS = [
   'Confirm',
 ];
 
-export default function CheckIn() {
   const rooms = useMotelStore((s) => s.rooms);
+  const guests = useMotelStore((s) => s.guests);
   const addGuest = useMotelStore((s) => s.addGuest);
   const addStay = useMotelStore((s) => s.addStay);
   const addPayment = useMotelStore((s) => s.addPayment);
@@ -86,6 +263,19 @@ export default function CheckIn() {
 
   const [completedStayId, setCompletedStayId] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Returning customer flow
+  const [isReturningCustomer, setIsReturningCustomer] = useState(false);
+  const [showReturningSelector, setShowReturningSelector] = useState(false);
+  const [selectedReturningGuestId, setSelectedReturningGuestId] = useState('');
+
+  // Phone signature flow
+  const [showPhoneSignature, setShowPhoneSignature] = useState(false);
+  const [phoneSigSessionId, setPhoneSigSessionId] = useState('');
+  const [phoneSigStatus, setPhoneSigStatus] = useState<'idle' | 'waiting' | 'received' | 'error'>('idle');
+  const [phoneSigDataUrl, setPhoneSigDataUrl] = useState('');
+  const [phoneSigError, setPhoneSigError] = useState('');
+  const phoneSigPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Derived ──
   const availableRooms = useMemo(
@@ -161,6 +351,27 @@ export default function CheckIn() {
     toast.success('ID data extracted — please review and add contact info');
   }, []);
 
+  // ── Returning Customer Handler ──
+  const handleReturningGuestSelect = useCallback((guestId: string) => {
+    const guest = guests.find((g) => g.id === guestId);
+    if (!guest) return;
+
+    setSelectedReturningGuestId(guestId);
+    setFirstName(guest.firstName);
+    setLastName(guest.lastName);
+    setPhone(guest.phone);
+    setEmail(guest.email || '');
+    setIdNumber(guest.idNumber);
+    setIdType(guest.idType || 'Driver License');
+    setIdState(guest.idState || '');
+    setDateOfBirth(guest.dateOfBirth);
+    setIdPhotoPreview(guest.idPhotoUrl || null);
+    setIdPhotoUrl(guest.idPhotoUrl || '');
+    setIdScanned(true);
+    setIsReturningCustomer(true);
+    toast.success(`Loaded ${guest.firstName} ${guest.lastName} — verify details and continue`);
+  }, [guests]);
+
   // ── Signature received from the phone flow ──
   // Auto-fills Step 4 (terms + signature) but keeps the step visible so the
   // admin can verify or clear & re-sign.
@@ -175,7 +386,9 @@ export default function CheckIn() {
   const canNext = (): boolean => {
     switch (step) {
       case 0: return availableRooms.length > 0;
-      case 1: return idScanned && idNumber.length >= 4;
+      case 1:
+        if (isReturningCustomer) return selectedReturningGuestId !== '';
+        return idScanned && idNumber.length >= 4;
       case 2: return firstName.length >= 2 && lastName.length >= 2 && phone.length >= 10;
       case 3: return true;
       case 4: return termsAccepted;
@@ -185,7 +398,9 @@ export default function CheckIn() {
   };
 
   const handleNext = () => {
-    if (step < STEPS.length - 1) setStep(step + 1);
+    if (step < STEPS.length - 1) {
+      setStep(step + 1);
+    }
   };
 
   const handleBack = () => {
@@ -208,17 +423,20 @@ export default function CheckIn() {
     setSubmitting(true);
 
     try {
-      const guestId = await addGuest({
-        firstName,
-        lastName,
-        phone,
-        email,
-        idNumber,
-        dateOfBirth,
-        idPhotoUrl: idPhotoUrl || undefined,
-        idType: idType || undefined,
-        idState: idState || undefined,
-      });
+      // For returning customers, reuse the existing guest ID
+      const guestId = isReturningCustomer && selectedReturningGuestId
+        ? selectedReturningGuestId
+        : await addGuest({
+            firstName,
+            lastName,
+            phone,
+            email,
+            idNumber,
+            dateOfBirth,
+            idPhotoUrl: idPhotoUrl || undefined,
+            idType: idType || undefined,
+            idState: idState || undefined,
+          });
 
       const stayId = await addStay({
         guestId,
@@ -308,6 +526,10 @@ export default function CheckIn() {
     setIdScanned(false);
     setCompletedStayId('');
     setSubmitting(false);
+    // Reset returning customer state
+    setIsReturningCustomer(false);
+    setShowReturningSelector(false);
+    setSelectedReturningGuestId('');
   };
 
   return (
@@ -430,79 +652,157 @@ export default function CheckIn() {
         {/* ── Step 1: Scan ID ── */}
         {step === 1 && (
           <div className="space-y-4">
-            <IdScanner
-              onScanComplete={handleScanComplete}
-              onSignatureReceived={handleSignatureReceived}
-            />
-
-            {/* Manual ID entry fallback (always visible) */}
+            {/* Returning Customer Toggle */}
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
-                  <PenLine className="w-4 h-4" /> Or enter manually
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="mb-1 block text-xs">ID Type</Label>
-                    <Select value={idType} onValueChange={setIdType}>
-                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Driver License">Driver License</SelectItem>
-                        <SelectItem value="State ID">State ID</SelectItem>
-                        <SelectItem value="Passport">Passport</SelectItem>
-                        <SelectItem value="Military ID">Military ID</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="mb-1 block text-xs">ID State</Label>
-                    <Input value={idState} onChange={(e) => setIdState(e.target.value)} placeholder="CO" className="h-9 text-sm" />
-                  </div>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <User className="w-5 h-5 text-muted-foreground" />
+                  <p className="text-sm font-medium">Returning Customer?</p>
                 </div>
-                <div>
-                  <Label className="mb-1 block text-xs">ID Number *</Label>
-                  <Input value={idNumber} onChange={(e) => { setIdNumber(e.target.value); if (e.target.value.length >= 4) setIdScanned(true); }} placeholder="DL-123456" className="h-9 text-sm" />
-                </div>
-                <div>
-                  <Label className="mb-1 block text-xs">Date of Birth *</Label>
-                  <Input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className="h-9 text-sm" />
-                </div>
-
-                {/* Optional file upload */}
-                <div>
-                  <Label className="mb-1 block text-xs">Upload ID Photo</Label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  {idPhotoPreview ? (
-                    <div className="relative rounded-lg overflow-hidden border border-border">
-                      <img src={idPhotoPreview} alt="ID Preview" className="w-full max-h-32 object-contain bg-muted/30" />
-                      <button
-                        onClick={() => { setIdPhotoPreview(null); setIdPhotoUrl(''); }}
-                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full p-4 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors cursor-pointer text-xs"
-                    >
-                      <Upload className="w-4 h-4" />
-                      <span>Upload ID photo</span>
-                    </button>
-                  )}
+                <div className="flex gap-3">
+                  <Button
+                    variant={isReturningCustomer ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setIsReturningCustomer(true);
+                      setShowReturningSelector(true);
+                    }}
+                  >
+                    Yes, Returning Guest
+                  </Button>
+                  <Button
+                    variant={!isReturningCustomer ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setIsReturningCustomer(false);
+                      setShowReturningSelector(false);
+                    }}
+                  >
+                    New Guest
+                  </Button>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Returning Guest Selector */}
+            {isReturningCustomer && showReturningSelector && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Select Returning Guest</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {guests.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No previous guests found.</p>
+                  ) : (
+                    <Select value={selectedReturningGuestId} onValueChange={handleReturningGuestSelect}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Search or select a guest..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {guests.map((g) => (
+                          <SelectItem key={g.id} value={g.id}>
+                            {g.firstName} {g.lastName} — {g.idNumber || g.phone || 'No ID'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      setIsReturningCustomer(false);
+                      setShowReturningSelector(false);
+                      setSelectedReturningGuestId('');
+                    }}
+                  >
+                    Cancel — Use New Guest Flow
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* New Guest: ID Scanner (only when not returning customer) */}
+            {!isReturningCustomer && (
+              <>
+                <IdScanner
+                  onScanComplete={handleScanComplete}
+                  onSignatureReceived={handleSignatureReceived}
+                />
+
+                {/* Manual ID entry fallback (always visible) */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
+                      <PenLine className="w-4 h-4" /> Or enter manually
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="mb-1 block text-xs">ID Type</Label>
+                        <Select value={idType} onValueChange={setIdType}>
+                          <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Driver License">Driver License</SelectItem>
+                            <SelectItem value="State ID">State ID</SelectItem>
+                            <SelectItem value="Passport">Passport</SelectItem>
+                            <SelectItem value="Military ID">Military ID</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="mb-1 block text-xs">ID State</Label>
+                        <Input value={idState} onChange={(e) => setIdState(e.target.value)} placeholder="CO" className="h-9 text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="mb-1 block text-xs">ID Number *</Label>
+                      <Input value={idNumber} onChange={(e) => { setIdNumber(e.target.value); if (e.target.value.length >= 4) setIdScanned(true); }} placeholder="DL-123456" className="h-9 text-sm" />
+                    </div>
+                    <div>
+                      <Label className="mb-1 block text-xs">Date of Birth *</Label>
+                      <Input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className="h-9 text-sm" />
+                    </div>
+
+                    {/* Optional file upload */}
+                    <div>
+                      <Label className="mb-1 block text-xs">Upload ID Photo</Label>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                      {idPhotoPreview ? (
+                        <div className="relative rounded-lg overflow-hidden border border-border">
+                          <img src={idPhotoPreview} alt="ID Preview" className="w-full max-h-32 object-contain bg-muted/30" />
+                          <button
+                            onClick={() => { setIdPhotoPreview(null); setIdPhotoUrl(''); }}
+                            className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full p-4 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors cursor-pointer text-xs"
+                        >
+                          <Upload className="w-4 h-4" />
+                          <span>Upload ID photo</span>
+                        </button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </div>
         )}
 
@@ -729,47 +1029,94 @@ export default function CheckIn() {
                     Clear
                   </button>
                 </div>
-                {signatureFromPhone && signatureDataUrl ? (
-                  <>
-                    <div
-                      className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden flex items-center justify-center"
-                      style={{
-                        backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
-                        backgroundSize: '100% 20px',
-                      }}
-                    >
-                      <img
-                        src={signatureDataUrl}
-                        alt="Guest signature from phone"
-                        className="max-h-full max-w-full object-contain"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                      <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
-                      <p className="text-[11px] text-green-700 dark:text-green-300">
-                        Signed on guest&apos;s phone. Tap <strong>Clear</strong> if you need to re-sign here.
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <div
-                    className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden"
-                    style={{
-                      backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
-                      backgroundSize: '100% 20px',
+
+                {/* Sign with Phone toggle */}
+                <div className="flex gap-2 mb-3">
+                  <Button
+                    variant={!showPhoneSignature ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setShowPhoneSignature(false);
+                      setPhoneSigStatus('idle');
+                      setPhoneSigDataUrl('');
                     }}
                   >
-                    <SignatureCanvas
-                      ref={sigCanvas}
-                      canvasProps={{ className: 'w-full h-full absolute inset-0 cursor-crosshair' }}
-                      penColor="#0f172a"
-                      onEnd={() => {
-                        if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
-                          setSignatureDataUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
-                        }
-                      }}
-                    />
-                  </div>
+                    Sign Here
+                  </Button>
+                  <Button
+                    variant={showPhoneSignature ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setShowPhoneSignature(true);
+                      setPhoneSigStatus('generating');
+                      setPhoneSigDataUrl('');
+                    }}
+                  >
+                    Sign with Phone
+                  </Button>
+                </div>
+
+                {/* Phone Signature Panel */}
+                {showPhoneSignature && (
+                  <PhoneSignaturePanel
+                    onReceived={(sigUrl, terms) => {
+                      setSignatureDataUrl(sigUrl);
+                      setSignatureFromPhone(true);
+                      if (terms) setTermsAccepted(true);
+                      setPhoneSigStatus('received');
+                      toast.success('Signature received from phone');
+                    }}
+                  />
+                )}
+
+                {/* Local signature pad (shown when not using phone) */}
+                {!showPhoneSignature && (
+                  <>
+                    {signatureFromPhone && signatureDataUrl ? (
+                      <>
+                        <div
+                          className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden flex items-center justify-center"
+                          style={{
+                            backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
+                            backgroundSize: '100% 20px',
+                          }}
+                        >
+                          <img
+                            src={signatureDataUrl}
+                            alt="Guest signature from phone"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                          <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                          <p className="text-[11px] text-green-700 dark:text-green-300">
+                            Signed on guest&apos;s phone. Tap <strong>Clear</strong> if you need to re-sign here.
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <div
+                        className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden"
+                        style={{
+                          backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
+                          backgroundSize: '100% 20px',
+                        }}
+                      >
+                        <SignatureCanvas
+                          ref={sigCanvas}
+                          canvasProps={{ className: 'w-full h-full absolute inset-0 cursor-crosshair' }}
+                          penColor="#0f172a"
+                          onEnd={() => {
+                            if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
+                              setSignatureDataUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </CardContent>

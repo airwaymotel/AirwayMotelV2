@@ -48,6 +48,7 @@ export default function MobileScanPage() {
 
   // 'barcode' vs 'photo' (front AI). 'id-scan' (legacy) maps to 'photo'.
   const isBarcodeMode = rawMode === 'barcode';
+  const isSignatureMode = rawMode === 'signature';
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -63,7 +64,7 @@ export default function MobileScanPage() {
   const [parsedId, setParsedId] = useState<ScannedIdData | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string>('');
-  const [step, setStep] = useState<Step>('capture');
+  const [step, setStep] = useState<Step>(isSignatureMode ? 'signature' : 'capture');
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
@@ -345,6 +346,7 @@ export default function MobileScanPage() {
     if (step === 'success') return 'Success';
     if (step === 'signature') return 'Check-In Agreement';
     if (isBarcodeMode) return parsedId ? 'ID Decoded' : 'Barcode Scanner';
+    if (isSignatureMode) return 'Sign the Agreement';
     return imageSrc ? 'Review Photo' : 'ID Scanner';
   })();
 
@@ -357,7 +359,7 @@ export default function MobileScanPage() {
       </header>
 
       {/* ── CAPTURE STEP ── */}
-      {step === 'capture' && !isBarcodeMode && (
+      {step === 'capture' && !isBarcodeMode && !isSignatureMode && (
         <div className="relative flex-1 overflow-hidden bg-black flex flex-col">
           <div className="relative flex-1 overflow-hidden">
             <video

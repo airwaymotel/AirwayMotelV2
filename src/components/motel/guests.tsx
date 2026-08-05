@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Download, Printer, Users, Clock, Repeat, Search, User } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Download, Printer, Users, Clock, Repeat, Search, User, Receipt } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +19,8 @@ import {
 import { useMotelStore } from '@/lib/store';
 
 export default function Guests() {
-  const guests = useMotelStore((s) => s.guests);
+   const router = useRouter();
+   const guests = useMotelStore((s) => s.guests);
   const stays = useMotelStore((s) => s.stays);
   const rooms = useMotelStore((s) => s.rooms);
   const payments = useMotelStore((s) => s.payments);
@@ -40,7 +42,9 @@ export default function Guests() {
 
       return {
         id: guest?.idNumber || stay.guestId.substring(0, 8),
+        guestId: guest?.id || stay.guestId,
         name: guest ? `${guest.firstName} ${guest.lastName}` : 'Unknown',
+        phone: guest?.phone || '',
         room: room?.roomNumber || '---',
         dates: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
         details: `${nights} Night${nights > 1 ? 's' : ''} • ${room?.type === '1-bed' ? '1-Bed King' : room?.type === '2-bed' ? '2-Bed Queen' : 'Standard'}`,
@@ -59,7 +63,8 @@ export default function Guests() {
     return historyData.filter((guest) => {
       const matchesSearch =
         guest.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        guest.id.toLowerCase().includes(searchQuery.toLowerCase());
+        guest.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        guest.phone.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesRoom = roomTypeFilter === 'All Types' || guest.roomType === roomTypeFilter;
       return matchesSearch && matchesRoom;
     });
@@ -234,6 +239,8 @@ export default function Guests() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="uppercase text-[10px]">Guest Name</TableHead>
+                  <TableHead className="uppercase text-[10px]">ID</TableHead>
+                  <TableHead className="uppercase text-[10px]">Phone</TableHead>
                   <TableHead className="uppercase text-[10px]">Room #</TableHead>
                   <TableHead className="uppercase text-[10px]">Stay Period</TableHead>
                   <TableHead className="uppercase text-[10px] text-center">Status</TableHead>
@@ -252,10 +259,11 @@ export default function Guests() {
                         </div>
                         <div>
                           <p className="text-sm font-medium">{row.name}</p>
-                          <p className="text-[11px] text-muted-foreground">ID: {row.id}</p>
                         </div>
                       </div>
                     </TableCell>
+                    <TableCell className="text-sm font-mono">{row.id}</TableCell>
+                    <TableCell className="text-sm">{row.phone || '—'}</TableCell>
                     <TableCell className="text-sm font-medium">#{row.room}</TableCell>
                     <TableCell>
                       <p className="text-sm">{row.dates}</p>
@@ -272,7 +280,7 @@ export default function Guests() {
                     <TableCell className="text-right text-sm font-medium">{row.paid}</TableCell>
                     <TableCell className="text-right no-print">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="View Profile">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="View Guest Details" onClick={() => router.push(`/guest/${row.guestId}`)}>
                           <User className="w-4 h-4" />
                         </Button>
                         {row.hasCash && (
@@ -283,7 +291,7 @@ export default function Guests() {
                             title="Download Cash Receipt"
                             onClick={() => window.open(`/stay/${row.stayId}/invoice?download=true`, '_blank')}
                           >
-                            <Download className="w-4 h-4" />
+                            <Receipt className="w-4 h-4" />
                           </Button>
                         )}
                       </div>
@@ -292,7 +300,7 @@ export default function Guests() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     No records found matching your filters.
                   </TableCell>
                 </TableRow>
