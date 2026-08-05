@@ -210,6 +210,8 @@ interface MotelStore {
 
   // Guest operations
   addGuest: (guest: Omit<Guest, 'id' | 'createdAt'>) => Promise<string>;
+  updateGuest: (guestId: string, updates: Partial<Omit<Guest, 'id' | 'createdAt'>>) => void;
+  deleteGuest: (guestId: string) => Promise<void>;
 
   // Stay operations
   addStay: (stay: Omit<Stay, 'id' | 'createdAt'>) => Promise<string>;
@@ -383,6 +385,50 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
       guests: [...state.guests, { ...guestData, id, createdAt: now }],
     }));
     return id;
+  },
+
+  updateGuest: (guestId, updates) => {
+    set((state) => ({
+      guests: state.guests.map((g) => (g.id === guestId ? { ...g, ...updates } : g)),
+    }));
+
+    if (isSupabaseConnected) {
+      const snakeUpdates: Record<string, unknown> = {};
+      if (updates.firstName !== undefined) snakeUpdates.first_name = updates.firstName;
+      if (updates.lastName !== undefined) snakeUpdates.last_name = updates.lastName;
+      if (updates.phone !== undefined) snakeUpdates.phone = updates.phone;
+      if (updates.email !== undefined) snakeUpdates.email = updates.email;
+      if (updates.idNumber !== undefined) snakeUpdates.id_number = updates.idNumber;
+      if (updates.dateOfBirth !== undefined) snakeUpdates.date_of_birth = updates.dateOfBirth;
+      if (updates.idType !== undefined) snakeUpdates.id_type = updates.idType;
+      if (updates.idState !== undefined) snakeUpdates.id_state = updates.idState;
+      patchApi('/api/guests', { id: guestId, ...snakeUpdates });
+    }
+  },
+
+  deleteGuest: async (guestId) => {
+    set((state) => {
+      const staysToDelete = state.stays.filter((s) => s.guestId === guestId);
+      const stayIds = new Set(staysToDelete.map((s) => s.id));
+      return {
+        guests: state.guests.filter((g) => g.id !== guestId),
+        stays: state.stays.filter((s) => s.guestId !== guestId),
+        payments: state.payments.filter((p) => !stayIds.has(p.stayId)),
+      };
+    });
+
+    if (isSupabaseConnected) {
+      try {
+        const res = await fetch(`/api/guests?id=${guestId}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || 'Failed to delete guest');
+        }
+      } catch (err) {
+        console.error('Failed to delete guest from Supabase:', err);
+        throw err;
+      }
+    }
   },
 
   // ── Stay operations ──
