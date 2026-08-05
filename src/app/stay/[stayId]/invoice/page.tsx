@@ -17,175 +17,195 @@ interface PrintData {
 
 function generateReceiptPdf(data: PrintData): jsPDF {
   const { stay, guest, room, payments } = data;
-  const doc = new jsPDF({ unit: 'mm', format: 'letter' });
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
-  const pageWidth = 215.9;
-  const margin = 18;
+  const pageWidth = 210;
+  const margin = 20;
   const contentWidth = pageWidth - margin * 2;
-  let y = margin;
+  const centerX = pageWidth / 2;
+  let y = 25;
+
+  const asteriskLine = '***************************************';
 
   const cashPayments = payments.filter(p => p.method === 'cash');
   const totalCashPaid = cashPayments.reduce((sum, p) => sum + p.amount, 0);
   const cardPayments = payments.filter(p => p.method === 'card');
   const totalCardPaid = cardPayments.reduce((sum, p) => sum + p.amount, 0);
+  const totalPaid = totalCashPaid + totalCardPaid;
 
   const start = new Date(stay.checkInDate);
   const end = new Date(stay.checkOutDate);
   const nights = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
   const roomTotal = stay.rateAmount * nights;
 
-  // ── Header ──
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.setTextColor(9, 9, 11);
-  doc.text('RECEIPT', margin, y + 6);
+  // ══════════════════════════════════════════
+  // HEADER
+  // ══════════════════════════════════════════
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(0, 0, 0);
+  doc.text('AIRWAY MOTEL', centerX, y, { align: 'center' });
+  y += 7;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(161, 161, 170);
-  doc.text('AIRWAY MOTEL — GUEST RECEIPT', margin, y + 11);
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(60, 60, 60);
+  doc.text('123 Motel Way, Denver, CO 80202', centerX, y, { align: 'center' });
+  y += 5;
+  doc.text('Tel. (555) 123-4567', centerX, y, { align: 'center' });
+  y += 7;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(217, 119, 6);
-  doc.text('Airway Motel', pageWidth - margin, y + 4, { align: 'right' });
+  // Asterisk divider
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text(asteriskLine, centerX, y, { align: 'center' });
+  y += 7;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(82, 82, 91);
-  doc.text('123 Motel Way', pageWidth - margin, y + 9, { align: 'right' });
-  doc.text('Denver, CO 80202', pageWidth - margin, y + 13, { align: 'right' });
-  doc.text('(555) 123-4567', pageWidth - margin, y + 17, { align: 'right' });
+  // CASH RECEIPT heading
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(16);
+  doc.text('CASH RECEIPT', centerX, y, { align: 'center' });
+  y += 7;
 
-  y += 24;
-  doc.setDrawColor(229, 229, 229);
-  doc.setLineWidth(0.5);
-  doc.line(margin, y, pageWidth - margin, y);
+  // Asterisk divider
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
+  doc.text(asteriskLine, centerX, y, { align: 'center' });
+  y += 10;
+
+  // ══════════════════════════════════════════
+  // GUEST & STAY INFO
+  // ══════════════════════════════════════════
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(0, 0, 0);
+
+  doc.text(`Guest: ${guest.firstName || ''} ${guest.lastName || ''}`, margin, y);
+  y += 5;
+  doc.text(`Room: #${room.roomNumber || 'N/A'}`, margin, y);
+  y += 5;
+  doc.text(`Check-In:  ${stay.checkInDate || ''}  ${stay.checkInTime || ''}`, margin, y);
+  y += 5;
+  doc.text(`Check-Out: ${stay.checkOutDate || ''}  ${stay.checkOutTime || ''}`, margin, y);
+  y += 5;
+  doc.text(`Nights: ${nights}`, margin, y);
   y += 8;
 
-  // ── Guest & Stay Info ──
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6);
-  doc.setTextColor(161, 161, 170);
-  doc.text('GUEST', margin, y);
+  // ══════════════════════════════════════════
+  // LINE ITEMS
+  // ══════════════════════════════════════════
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(10);
+  doc.text('Description', margin, y);
+  doc.text('Price', pageWidth - margin, y, { align: 'right' });
+  y += 3;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(39, 39, 42);
-  doc.text(`${guest.firstName || ''} ${guest.lastName || ''}`, margin, y + 6);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(82, 82, 91);
-  doc.text(`ID: ${guest.idNumber || 'N/A'}`, margin, y + 11);
-  doc.text(`Phone: ${guest.phone || 'N/A'}`, margin, y + 15.5);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6);
-  doc.setTextColor(161, 161, 170);
-  doc.text('STAY DETAILS', pageWidth - margin, y, { align: 'right' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(39, 39, 42);
-  doc.text(`Room #${room.roomNumber || ''}`, pageWidth - margin, y + 6, { align: 'right' });
-  doc.setTextColor(82, 82, 91);
-  doc.text(`Check In: ${stay.checkInDate || ''}`, pageWidth - margin, y + 11, { align: 'right' });
-  doc.text(`Check Out: ${stay.checkOutDate || ''}`, pageWidth - margin, y + 15.5, { align: 'right' });
-  doc.text(`${nights} Night${nights > 1 ? 's' : ''}`, pageWidth - margin, y + 20, { align: 'right' });
-
-  y += 28;
-
-  doc.setDrawColor(39, 39, 42);
-  doc.setLineWidth(0.5);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 5;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6);
-  doc.setTextColor(39, 39, 42);
-  doc.text('DESCRIPTION', margin, y);
-  doc.text('AMOUNT', pageWidth - margin, y, { align: 'right' });
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
+  doc.text('- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -', centerX, y, { align: 'center' });
   y += 6;
 
-  doc.setDrawColor(229, 229, 229);
-  doc.setLineWidth(0.3);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(39, 39, 42);
-  doc.text(`Room Charge (${nights} Night${nights > 1 ? 's' : ''} x $${stay.rateAmount})`, margin, y);
+  // Room charge line item
+  doc.text(`Room (${nights} night${nights > 1 ? 's' : ''} x $${stay.rateAmount})`, margin, y);
   doc.text(`$${roomTotal.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
+  y += 6;
+
+  doc.text('- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -', centerX, y, { align: 'center' });
   y += 8;
 
-  doc.setDrawColor(229, 229, 229);
-  doc.setLineWidth(0.3);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text('Subtotal', margin, y);
+  // ══════════════════════════════════════════
+  // FINANCIAL SUMMARY
+  // ══════════════════════════════════════════
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(13);
+  doc.text('TOTAL', margin, y);
   doc.text(`$${roomTotal.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
   y += 7;
 
-  doc.setFillColor(245, 245, 245);
-  doc.rect(margin, y - 2, contentWidth, 10, 'F');
-  doc.setDrawColor(39, 39, 42);
-  doc.setLineWidth(0.5);
-  doc.line(margin, y + 8, pageWidth - margin, y + 8);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('TOTAL', margin + 3, y + 5);
-  doc.text(`$${roomTotal.toFixed(2)}`, pageWidth - margin - 3, y + 5, { align: 'right' });
-  y += 16;
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
 
   if (totalCashPaid > 0) {
-    doc.setFillColor(240, 253, 244);
-    doc.roundedRect(margin, y, contentWidth, 12, 1.5, 1.5, 'F');
-    doc.setDrawColor(187, 247, 208);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(margin, y, contentWidth, 12, 1.5, 1.5, 'S');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(22, 101, 52);
-    doc.text('CASH PAYMENT RECEIVED', pageWidth / 2, y + 4.5, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(21, 128, 61);
-    doc.text(`Amount: $${totalCashPaid.toFixed(2)}`, pageWidth / 2, y + 9, { align: 'center' });
-    y += 16;
+    doc.text('Cash', margin, y);
+    doc.text(`$${totalCashPaid.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
+    y += 5;
   }
 
   if (totalCardPaid > 0) {
-    doc.setFillColor(239, 246, 255);
-    doc.roundedRect(margin, y, contentWidth, 12, 1.5, 1.5, 'F');
-    doc.setDrawColor(191, 219, 254);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(margin, y, contentWidth, 12, 1.5, 1.5, 'S');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(30, 64, 175);
-    doc.text('CARD PAYMENT RECEIVED', pageWidth / 2, y + 4.5, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(29, 78, 216);
-    doc.text(`Amount: $${totalCardPaid.toFixed(2)}`, pageWidth / 2, y + 9, { align: 'center' });
-    y += 16;
+    doc.text('Card', margin, y);
+    doc.text(`$${totalCardPaid.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
+    y += 5;
   }
 
-  const footerY = 255;
-  doc.setDrawColor(229, 229, 229);
-  doc.setLineWidth(0.3);
-  doc.line(margin, footerY, pageWidth - margin, footerY);
-  doc.setFont('helvetica', 'normal');
+  const change = totalPaid - roomTotal;
+  if (change > 0) {
+    doc.setFont('courier', 'bold');
+    doc.text('Change', margin, y);
+    doc.text(`$${change.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
+    y += 5;
+  }
+
+  y += 3;
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
+  doc.text(asteriskLine, centerX, y, { align: 'center' });
+  y += 8;
+
+  // ══════════════════════════════════════════
+  // PAYMENT META DETAILS
+  // ══════════════════════════════════════════
+  if (totalCardPaid > 0) {
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(9);
+    doc.text('Payment Method', margin, y);
+    doc.text('Card', pageWidth - margin, y, { align: 'right' });
+    y += 5;
+  }
+
+  if (totalCashPaid > 0) {
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(9);
+    doc.text('Payment Method', margin, y);
+    doc.text('Cash', pageWidth - margin, y, { align: 'right' });
+    y += 5;
+  }
+
+  doc.text('Date', margin, y);
+  doc.text(stay.checkOutDate || '', pageWidth - margin, y, { align: 'right' });
+  y += 5;
+
+  doc.text('Time', margin, y);
+  doc.text(stay.checkOutTime || '', pageWidth - margin, y, { align: 'right' });
+  y += 5;
+
+  doc.text('Receipt #', margin, y);
+  doc.text(stay.id ? stay.id.slice(0, 8).toUpperCase() : 'N/A', pageWidth - margin, y, { align: 'right' });
+  y += 8;
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
+  doc.text(asteriskLine, centerX, y, { align: 'center' });
+  y += 10;
+
+  // ══════════════════════════════════════════
+  // FOOTER
+  // ══════════════════════════════════════════
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(12);
+  doc.text('THANK YOU!', centerX, y, { align: 'center' });
+  y += 7;
+
+  doc.setFont('courier', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(161, 161, 170);
-  doc.text('Thank you for staying with Airway Motel!', pageWidth / 2, footerY + 5, { align: 'center' });
-  doc.text('Please retain this receipt for your records.', pageWidth / 2, footerY + 10, { align: 'center' });
+  doc.setTextColor(100, 100, 100);
+  doc.text('Please retain this receipt for your records.', centerX, y, { align: 'center' });
+  y += 10;
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text(asteriskLine, centerX, y, { align: 'center' });
 
   return doc;
 }
