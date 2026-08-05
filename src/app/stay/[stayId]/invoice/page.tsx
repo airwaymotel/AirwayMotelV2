@@ -74,7 +74,7 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(39, 39, 42);
-  doc.text(`${guest.firstName} ${guest.lastName}`, margin, y + 6);
+  doc.text(`${guest.firstName || ''} ${guest.lastName || ''}`, margin, y + 6);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
@@ -91,16 +91,15 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(39, 39, 42);
-  doc.text(`Room #${room.roomNumber}`, pageWidth - margin, y + 6, { align: 'right' });
+  doc.text(`Room #${room.roomNumber || ''}`, pageWidth - margin, y + 6, { align: 'right' });
   doc.setTextColor(82, 82, 91);
-  doc.text(`Check In: ${stay.checkInDate}`, pageWidth - margin, y + 11, { align: 'right' });
-  doc.text(`Check Out: ${stay.checkOutDate}`, pageWidth - margin, y + 15.5, { align: 'right' });
+  doc.text(`Check In: ${stay.checkInDate || ''}`, pageWidth - margin, y + 11, { align: 'right' });
+  doc.text(`Check Out: ${stay.checkOutDate || ''}`, pageWidth - margin, y + 15.5, { align: 'right' });
   doc.text(`${nights} Night${nights > 1 ? 's' : ''}`, pageWidth - margin, y + 20, { align: 'right' });
 
   y += 28;
 
   // ── Charges Table ──
-  // Table header
   doc.setDrawColor(39, 39, 42);
   doc.setLineWidth(0.5);
   doc.line(margin, y, pageWidth - margin, y);
@@ -113,7 +112,6 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   doc.text('AMOUNT', pageWidth - margin, y, { align: 'right' });
   y += 6;
 
-  // Room charge row
   doc.setDrawColor(229, 229, 229);
   doc.setLineWidth(0.3);
   doc.line(margin, y, pageWidth - margin, y);
@@ -220,57 +218,76 @@ export default function InvoicePage() {
     async function load() {
       if (!stayId) return;
       try {
+        // Try Supabase first with joined query
         if (supabase) {
           const { data: stayRow, error: stayErr } = await supabase
             .from('stays')
-            .select('*')
+            .select('*, guests(*), rooms(*), payments(*)')
             .eq('id', stayId)
             .single();
 
           if (!stayErr && stayRow) {
-            const [{ data: guest }, { data: room }, { data: rawPmts }] = await Promise.all([
-              supabase.from('guests').select('*').eq('id', stayRow.guest_id).single(),
-              supabase.from('rooms').select('*').eq('id', stayRow.room_id).single(),
-              supabase.from('payments').select('*').eq('stay_id', stayId)
-            ]);
+            const g = stayRow.guests as Record<string, unknown>;
+            const r = stayRow.rooms as Record<string, unknown>;
 
-            if (guest && room && rawPmts) {
-              const pmts: Payment[] = rawPmts.map((p) => ({
-                id: p.id as string,
-                stayId: p.stay_id as string,
-                amount: p.amount as number,
-                method: (p.method as Payment['method']) || 'card',
-                description: (p.description as string) || '',
-                paidAt: p.paid_at as string,
-              }));
+            const guest: Guest = {
+              id: g.id as string,
+              firstName: (g.first_name as string) || '',
+              lastName: (g.last_name as string) || '',
+              phone: (g.phone as string) || '',
+              email: (g.email as string) || '',
+              idNumber: (g.id_number as string) || '',
+              dateOfBirth: g.date_of_birth ? String(g.date_of_birth) : '',
+              idPhotoUrl: (g.id_photo_url as string) || '',
+              idType: (g.id_type as string) || '',
+              idState: (g.id_state as string) || '',
+              createdAt: g.created_at as string,
+            };
 
-              const stay: Stay = {
-                id: stayRow.id,
-                guestId: stayRow.guest_id,
-                roomId: stayRow.room_id,
-                checkInDate: stayRow.check_in_date,
-                checkInTime: stayRow.check_in_time,
-                checkOutDate: stayRow.check_out_date,
-                checkOutTime: stayRow.check_out_time,
-                rateAmount: stayRow.rate_amount,
-                status: stayRow.status,
-                createdAt: stayRow.created_at,
-              };
+            const room: Room = {
+              id: r.id as string,
+              roomNumber: (r.room_number as string) || '',
+              type: (r.type as Room['type']) || '1-bed',
+              rate: r.type === '2-bed' ? 85 : 65,
+              status: (r.status as Room['status']) || 'available',
+            };
 
-              setData({ stay, guest, room, payments: pmts });
-              return;
-            }
+            const rawPmts = (stayRow.payments || []) as Record<string, unknown>[];
+            const pmts: Payment[] = rawPmts.map((p) => ({
+              id: p.id as string,
+              stayId: p.stay_id as string,
+              amount: p.amount as number,
+              method: (p.method as Payment['method']) || 'card',
+              description: (p.description as string) || '',
+              paidAt: p.paid_at as string,
+            }));
+
+            const stay: Stay = {
+              id: stayRow.id,
+              guestId: stayRow.guest_id,
+              roomId: stayRow.room_id,
+              checkInDate: stayRow.check_in_date,
+              checkInTime: stayRow.check_in_time,
+              checkOutDate: stayRow.check_out_date,
+              checkOutTime: stayRow.check_out_time,
+              rateAmount: stayRow.rate_amount,
+              status: stayRow.status,
+              createdAt: stayRow.created_at,
+            };
+
+            setData({ stay, guest, room, payments: pmts });
+            return;
           }
         }
 
-        // Fallback
+        // Fallback to local store
         const stay = stays.find((s) => s.id === stayId);
-        if (!stay) throw new Error('Not found');
+        if (!stay) throw new Error('Stay not found');
         const guest = guests.find((g) => g.id === stay.guestId);
         const room = rooms.find((r) => r.id === stay.roomId);
         const stayPayments = payments.filter((p) => p.stayId === stayId);
 
-        if (!guest || !room) throw new Error('Missing data');
+        if (!guest || !room) throw new Error('Missing guest or room data');
 
         setData({ stay, guest, room, payments: stayPayments });
       } catch (err) {
@@ -287,10 +304,8 @@ export default function InvoicePage() {
       const timer = setTimeout(() => {
         try {
           const doc = generateReceiptPdf(data);
-          const fileName = `receipt_${data.guest.lastName}_${data.room.roomNumber}.pdf`;
+          const fileName = `receipt_${data.guest.lastName || 'guest'}_${data.room.roomNumber || 'room'}.pdf`;
           doc.save(fileName);
-
-          // Show success message, then close
           setGenerating(false);
           setTimeout(() => window.close(), 2000);
         } catch (err) {
@@ -376,7 +391,7 @@ export default function InvoicePage() {
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
         textAlign: 'center',
       }}>
-        <div style={{ fontSize: '32px', marginBottom: '12px' }}>✓</div>
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>&#10003;</div>
         <p style={{ fontWeight: 600, color: '#18181b', marginBottom: '4px' }}>PDF Downloaded!</p>
         <p style={{ color: '#71717a', fontSize: '13px' }}>Check your downloads folder.</p>
         <button
