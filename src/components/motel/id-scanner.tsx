@@ -2,21 +2,24 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Camera, ScanLine, Upload, Loader2, CheckCircle, AlertCircle,
-  X, RotateCcw, ArrowLeft, Zap, Smartphone, QrCode,
+  Camera, Upload, Loader2, CheckCircle, AlertCircle,
+  X, RotateCcw, ArrowLeft, Zap, QrCode,
 } from 'lucide-react';
+// import { ScanLine } from 'lucide-react'; // BARCODE: uncomment when re-enabling barcode scanning
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { parseAAMVA, partialScannedIdFromRaw, type ScannedIdData } from '@/lib/parse-aamva';
+// import { parseAAMVA, partialScannedIdFromRaw } from '@/lib/parse-aamva'; // BARCODE: uncomment when re-enabling barcode scanning
+import type { ScannedIdData } from '@/lib/parse-aamva';
 
 // Re-export the shared type so existing importers (check-in.tsx) keep working.
 export type { ScannedIdData } from '@/lib/parse-aamva';
 
-type ScanMode = 'choose' | 'barcode' | 'vision';
+// BARCODE: Uncomment 'barcode' when re-enabling barcode scanning
+type ScanMode = 'choose' | 'vision';
 type ScanStatus = 'idle' | 'scanning' | 'processing' | 'success' | 'error';
 
 interface IdScannerProps {
@@ -35,163 +38,166 @@ interface PhoneReceived {
   termsAccepted?: boolean;
 }
 
-// ── Barcode Scanner (PC camera) Component ──────────────────────────
-// Secondary fallback for when the phone isn't available.
-
-function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData) => void }) {
-  const scannerRef = useRef<HTMLDivElement>(null);
-  const html5QrRef = useRef<any>(null);
-  const [status, setStatus] = useState<'idle' | 'starting' | 'scanning' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
-
-  const startScanner = useCallback(async () => {
-    if (!scannerRef.current) return;
-    setStatus('starting');
-    setErrorMsg('');
-
-    try {
-      const { Html5Qrcode } = await import('html5-qrcode');
-      const scanner = new Html5Qrcode('id-barcode-scanner');
-      html5QrRef.current = scanner;
-
-      await scanner.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 280, height: 200 },
-          // @ts-expect-error - PDF417 format constant
-          formatsToSupport: [0],
-        },
-        (decodedText: string) => {
-          const parsed = parseAAMVA(decodedText);
-          const result = parsed || partialScannedIdFromRaw(decodedText);
-          scanner.stop().catch(() => {});
-          onScanSuccess(result);
-        },
-        () => {}
-      );
-
-      setStatus('scanning');
-    } catch (err: any) {
-      console.error('Scanner error:', err);
-      setStatus('error');
-      setErrorMsg(err?.message || 'Failed to start camera. Please check permissions.');
-    }
-  }, [onScanSuccess]);
-
-  const stopScanner = useCallback(() => {
-    if (html5QrRef.current) {
-      html5QrRef.current.stop().catch(() => {});
-      html5QrRef.current.clear().catch(() => {});
-      html5QrRef.current = null;
-    }
-    setStatus('idle');
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (html5QrRef.current) {
-        html5QrRef.current.stop().catch(() => {});
-        html5QrRef.current.clear().catch(() => {});
-      }
-    };
-  }, []);
-
-  const handleRetry = () => {
-    if (html5QrRef.current) {
-      html5QrRef.current.stop().catch(() => {});
-      html5QrRef.current.clear().catch(() => {});
-      html5QrRef.current = null;
-    }
-    setStatus('idle');
-    setErrorMsg('');
-  };
-
-  if (status === 'idle') {
-    return (
-      <div className="space-y-4">
-        <div className="rounded-xl border-2 border-dashed border-border bg-muted/30 p-8 flex flex-col items-center gap-4">
-          <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center">
-            <ScanLine className="w-8 h-8" />
-          </div>
-          <div className="text-center">
-            <p className="font-medium text-sm">Barcode Scanner</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Position the PDF417 barcode on the back of the ID within the camera frame
-            </p>
-          </div>
-          <Button onClick={startScanner} className="gap-2">
-            <Camera className="w-4 h-4" />
-            Start Scanning
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground text-center">
-          Tap <strong>Start Scanning</strong> to open the camera and scan the barcode
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3]">
-        <div id="id-barcode-scanner" ref={scannerRef} className="w-full h-full" />
-        {status === 'starting' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-            <div className="text-center text-white">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
-              <p className="text-sm">Starting camera...</p>
-            </div>
-          </div>
-        )}
-        {status === 'scanning' && (
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute inset-4 border-2 border-white/30 rounded-lg">
-              <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-white rounded-tl-lg" />
-              <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-white rounded-tr-lg" />
-              <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-white rounded-bl-lg" />
-              <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-white rounded-br-lg" />
-            </div>
-            <div className="absolute bottom-4 left-0 right-0 text-center">
-              <p className="text-white/80 text-xs bg-black/50 inline-block px-3 py-1 rounded-full">
-                Hold the back of the ID to the camera
-              </p>
-            </div>
-          </div>
-        )}
-        {status === 'error' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-            <div className="text-center text-white px-4">
-              <AlertCircle className="w-10 h-10 mx-auto mb-2 text-red-400" />
-              <p className="text-sm mb-3">{errorMsg}</p>
-              <Button variant="outline" size="sm" onClick={handleRetry}>
-                <RotateCcw className="w-4 h-4 mr-1" /> Retry
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-      {status === 'scanning' && (
-        <Button variant="outline" size="sm" className="w-full" onClick={stopScanner}>
-          <X className="w-4 h-4 mr-2" /> Stop Scanner
-        </Button>
-      )}
-      <p className="text-xs text-muted-foreground text-center">
-        Position the <strong>PDF417 barcode</strong> on the back of the ID within the frame
-      </p>
-    </div>
-  );
-}
+// ══════════════════════════════════════════════════════════════════════════════
+// BARCODE SCANNER — COMMENTED OUT (not currently used)
+// Re-enable when PDF417 barcode scanning is needed in the future.
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// function BarcodeScanner({ onScanSuccess }: { onScanSuccess: (data: ScannedIdData) => void }) {
+//   const scannerRef = useRef<HTMLDivElement>(null);
+//   const html5QrRef = useRef<any>(null);
+//   const [status, setStatus] = useState<'idle' | 'starting' | 'scanning' | 'error'>('idle');
+//   const [errorMsg, setErrorMsg] = useState('');
+//
+//   const startScanner = useCallback(async () => {
+//     if (!scannerRef.current) return;
+//     setStatus('starting');
+//     setErrorMsg('');
+//
+//     try {
+//       const { Html5Qrcode } = await import('html5-qrcode');
+//       const scanner = new Html5Qrcode('id-barcode-scanner');
+//       html5QrRef.current = scanner;
+//
+//       await scanner.start(
+//         { facingMode: 'environment' },
+//         {
+//           fps: 10,
+//           qrbox: { width: 280, height: 200 },
+//           // @ts-expect-error - PDF417 format constant
+//           formatsToSupport: [0],
+//         },
+//         (decodedText: string) => {
+//           const parsed = parseAAMVA(decodedText);
+//           const result = parsed || partialScannedIdFromRaw(decodedText);
+//           scanner.stop().catch(() => {});
+//           onScanSuccess(result);
+//         },
+//         () => {}
+//       );
+//
+//       setStatus('scanning');
+//     } catch (err: any) {
+//       console.error('Scanner error:', err);
+//       setStatus('error');
+//       setErrorMsg(err?.message || 'Failed to start camera. Please check permissions.');
+//     }
+//   }, [onScanSuccess]);
+//
+//   const stopScanner = useCallback(() => {
+//     if (html5QrRef.current) {
+//       html5QrRef.current.stop().catch(() => {});
+//       html5QrRef.current.clear().catch(() => {});
+//       html5QrRef.current = null;
+//     }
+//     setStatus('idle');
+//   }, []);
+//
+//   useEffect(() => {
+//     return () => {
+//       if (html5QrRef.current) {
+//         html5QrRef.current.stop().catch(() => {});
+//         html5QrRef.current.clear().catch(() => {});
+//       }
+//     };
+//   }, []);
+//
+//   const handleRetry = () => {
+//     if (html5QrRef.current) {
+//       html5QrRef.current.stop().catch(() => {});
+//       html5QrRef.current.clear().catch(() => {});
+//       html5QrRef.current = null;
+//     }
+//     setStatus('idle');
+//     setErrorMsg('');
+//   };
+//
+//   if (status === 'idle') {
+//     return (
+//       <div className="space-y-4">
+//         <div className="rounded-xl border-2 border-dashed border-border bg-muted/30 p-8 flex flex-col items-center gap-4">
+//           <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center">
+//             <ScanLine className="w-8 h-8" />
+//           </div>
+//           <div className="text-center">
+//             <p className="font-medium text-sm">Barcode Scanner</p>
+//             <p className="text-xs text-muted-foreground mt-1">
+//               Position the PDF417 barcode on the back of the ID within the camera frame
+//             </p>
+//           </div>
+//           <Button onClick={startScanner} className="gap-2">
+//             <Camera className="w-4 h-4" />
+//             Start Scanning
+//           </Button>
+//         </div>
+//         <p className="text-xs text-muted-foreground text-center">
+//           Tap <strong>Start Scanning</strong> to open the camera and scan the barcode
+//         </p>
+//       </div>
+//     );
+//   }
+//
+//   return (
+//     <div className="space-y-4">
+//       <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3]">
+//         <div id="id-barcode-scanner" ref={scannerRef} className="w-full h-full" />
+//         {status === 'starting' && (
+//           <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+//             <div className="text-center text-white">
+//               <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+//               <p className="text-sm">Starting camera...</p>
+//             </div>
+//           </div>
+//         )}
+//         {status === 'scanning' && (
+//           <div className="absolute inset-0 pointer-events-none">
+//             <div className="absolute inset-4 border-2 border-white/30 rounded-lg">
+//               <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-white rounded-tl-lg" />
+//               <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-white rounded-tr-lg" />
+//               <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-white rounded-bl-lg" />
+//               <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-white rounded-br-lg" />
+//             </div>
+//             <div className="absolute bottom-4 left-0 right-0 text-center">
+//               <p className="text-white/80 text-xs bg-black/50 inline-block px-3 py-1 rounded-full">
+//                 Hold the back of the ID to the camera
+//               </p>
+//             </div>
+//           </div>
+//         )}
+//         {status === 'error' && (
+//           <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+//             <div className="text-center text-white px-4">
+//               <AlertCircle className="w-10 h-10 mx-auto mb-2 text-red-400" />
+//               <p className="text-sm mb-3">{errorMsg}</p>
+//               <Button variant="outline" size="sm" onClick={handleRetry}>
+//                 <RotateCcw className="w-4 h-4 mr-1" /> Retry
+//               </Button>
+//             </div>
+//           </div>
+//         )}
+//       </div>
+//       {status === 'scanning' && (
+//         <Button variant="outline" size="sm" className="w-full" onClick={stopScanner}>
+//           <X className="w-4 h-4 mr-2" /> Stop Scanner
+//         </Button>
+//       )}
+//       <p className="text-xs text-muted-foreground text-center">
+//         Position the <strong>PDF417 barcode</strong> on the back of the ID within the frame
+//       </p>
+//     </div>
+//   );
+// }
+// ══════════════════════════════════════════════════════════════════════════════
+// END BARCODE SCANNER
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── Phone Scan Panel ───────────────────────────────────────────────
-// Shows a QR code linking to /scan/{id}?mode=...
+// Shows a QR code linking to /scan/{id}?mode=photo
 // Desktop polls GET /api/scan-session until the phone submits, then fires onReceived.
 
 function PhoneScanPanel({
-  mode,
   onReceived,
 }: {
-  mode: 'photo' | 'barcode';
   onReceived: (payload: PhoneReceived) => void;
 }) {
   const [sessionId, setSessionId] = useState<string>('');
@@ -217,7 +223,7 @@ function PhoneScanPanel({
         const res = await fetch('/api/scan-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'create', sessionId: id, mode }),
+          body: JSON.stringify({ action: 'create', sessionId: id, mode: 'photo' }),
         });
 
         if (!res.ok) {
@@ -237,7 +243,7 @@ function PhoneScanPanel({
       setSessionId(id);
 
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const url = `${origin}/scan/${id}?mode=${mode}`;
+      const url = `${origin}/scan/${id}?mode=photo`;
       setScanUrl(url);
       setStatus('waiting');
 
@@ -284,7 +290,7 @@ function PhoneScanPanel({
         pollingRef.current = null;
       }
     };
-  }, [mode]);
+  }, []);
 
   const handleCancel = () => {
     if (pollingRef.current) {
@@ -310,8 +316,6 @@ function PhoneScanPanel({
     );
   }
 
-  const isBarcode = mode === 'barcode';
-
   return (
     <div className="space-y-4">
       {/* QR Code */}
@@ -331,8 +335,7 @@ function PhoneScanPanel({
         <div className="text-center space-y-1">
           <p className="text-sm font-medium">Scan with your phone</p>
           <p className="text-xs text-muted-foreground">
-            Open your phone&apos;s camera and scan this QR code to{' '}
-            {isBarcode ? 'scan the barcode on the back of the ID' : 'take a photo of the front of the ID'}
+            Open your phone&apos;s camera and scan this QR code to take a photo of the front of the ID
           </p>
         </div>
       </div>
@@ -356,7 +359,7 @@ function PhoneScanPanel({
           <div className="flex-1">
             <p className="text-xs font-medium text-green-700 dark:text-green-400">Received from phone!</p>
             <p className="text-[11px] text-green-600/70 dark:text-green-400/60">
-              {isBarcode ? 'Applying decoded data...' : 'Processing ID photo with AI...'}
+              Processing ID photo with AI...
             </p>
           </div>
         </div>
@@ -378,7 +381,7 @@ function PhoneScanPanel({
         </div>
         <div className="flex items-start gap-2">
           <span className="text-amber-500 font-bold">2</span>
-          <span>{isBarcode ? 'Scan the PDF417 barcode on the back of the ID' : 'Take a clear photo of the front of the ID'}</span>
+          <span>Take a clear photo of the front of the ID</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-amber-500 font-bold">3</span>
@@ -458,13 +461,7 @@ function VisionScanner({
         onSignatureReceived?.(payload.signatureDataUrl, !!payload.termsAccepted);
       }
 
-      // If phone sent parsed barcode data, use it directly
-      if (payload.parsedData) {
-        onScanSuccess(payload.parsedData, payload.imageStorageUrl || payload.imageBase64 || undefined);
-        return;
-      }
-
-      // Otherwise, phone sent a photo — process it with AI
+      // Phone sent a photo — process it with AI
       const imageUrl = payload.imageStorageUrl || payload.imageBase64;
       if (imageUrl) {
         processImage(imageUrl);
@@ -473,7 +470,7 @@ function VisionScanner({
         setErrorMsg('No image received from phone.');
       }
     },
-    [processImage, onScanSuccess, onSignatureReceived]
+    [processImage, onSignatureReceived]
   );
 
   const handleRetry = () => {
@@ -557,7 +554,7 @@ function VisionScanner({
           <ArrowLeft className="w-4 h-4" />
           Back to options
         </button>
-        <PhoneScanPanel mode="photo" onReceived={handlePhoneReceived} />
+        <PhoneScanPanel onReceived={handlePhoneReceived} />
       </div>
     );
   }
@@ -636,104 +633,109 @@ function VisionScanner({
   return null;
 }
 
-// ── Barcode Scanner Wrapper ────────────────────────────────────────
-// Primary: Scan with Phone. Secondary: Use this PC's camera (html5-qrcode).
-
-function BarcodeScannerSection({
-  onScanSuccess,
-  onSignatureReceived,
-  processImage,
-}: {
-  onScanSuccess: (data: ScannedIdData, imageBase64?: string) => void;
-  onSignatureReceived?: (signatureDataUrl: string, termsAccepted: boolean) => void;
-  processImage: (dataUrl: string) => Promise<void>;
-}) {
-  const [subMode, setSubMode] = useState<'choose' | 'phone' | 'pc'>('choose');
-
-  const handlePhoneReceived = useCallback(
-    (payload: PhoneReceived) => {
-      if (payload.signatureDataUrl) {
-        onSignatureReceived?.(payload.signatureDataUrl, !!payload.termsAccepted);
-      }
-      // If phone sent parsed barcode data, use it directly
-      if (payload.parsedData) {
-        onScanSuccess(payload.parsedData, payload.imageStorageUrl || payload.imageBase64 || undefined);
-        return;
-      }
-      // Otherwise, phone sent a photo — process it with AI
-      const imageUrl = payload.imageStorageUrl || payload.imageBase64;
-      if (imageUrl) {
-        processImage(imageUrl);
-      } else {
-        toast.error('No image received from phone. Please try again.');
-        setSubMode('choose');
-      }
-    },
-    [onScanSuccess, onSignatureReceived, processImage]
-  );
-
-  if (subMode === 'choose') {
-    return (
-      <div className="space-y-3">
-        <div className="grid grid-cols-1 gap-3">
-          {/* Option 1: Scan with phone (primary) */}
-          <button
-            onClick={() => setSubMode('phone')}
-            className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
-          >
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
-                <QrCode className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold text-base">Scan with Phone</p>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Scan a QR code with your phone, scan the PDF417 barcode on the back of the ID, agree to the terms and sign — all sent back here. Instant, 100% accurate.
-                </p>
-                <Badge variant="secondary" className="mt-2 text-[10px]">Recommended</Badge>
-              </div>
-            </div>
-          </button>
-
-          {/* Option 2: Use this PC's camera */}
-          <button
-            onClick={() => setSubMode('pc')}
-            className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
-          >
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center shrink-0">
-                <ScanLine className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold text-base">Use this PC&apos;s Camera</p>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Hold the back of the ID to this computer&apos;s camera. No terms/signature captured on the phone.
-                </p>
-              </div>
-            </div>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <button
-        onClick={() => setSubMode('choose')}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to options
-      </button>
-      {subMode === 'phone' ? (
-        <PhoneScanPanel mode="barcode" onReceived={handlePhoneReceived} />
-      ) : (
-        <BarcodeScanner onScanSuccess={onScanSuccess} />
-      )}
-    </div>
-  );
-}
+// ══════════════════════════════════════════════════════════════════════════════
+// BARCODE SCANNER SECTION — COMMENTED OUT (not currently used)
+// Re-enable when PDF417 barcode scanning is needed in the future.
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// function BarcodeScannerSection({
+//   onScanSuccess,
+//   onSignatureReceived,
+//   processImage,
+// }: {
+//   onScanSuccess: (data: ScannedIdData, imageBase64?: string) => void;
+//   onSignatureReceived?: (signatureDataUrl: string, termsAccepted: boolean) => void;
+//   processImage: (dataUrl: string) => Promise<void>;
+// }) {
+//   const [subMode, setSubMode] = useState<'choose' | 'phone' | 'pc'>('choose');
+//
+//   const handlePhoneReceived = useCallback(
+//     (payload: PhoneReceived) => {
+//       if (payload.signatureDataUrl) {
+//         onSignatureReceived?.(payload.signatureDataUrl, !!payload.termsAccepted);
+//       }
+//       // If phone sent parsed barcode data, use it directly
+//       if (payload.parsedData) {
+//         onScanSuccess(payload.parsedData, payload.imageStorageUrl || payload.imageBase64 || undefined);
+//         return;
+//       }
+//       // Otherwise, phone sent a photo — process it with AI
+//       const imageUrl = payload.imageStorageUrl || payload.imageBase64;
+//       if (imageUrl) {
+//         processImage(imageUrl);
+//       } else {
+//         toast.error('No image received from phone. Please try again.');
+//         setSubMode('choose');
+//       }
+//     },
+//     [onScanSuccess, onSignatureReceived, processImage]
+//   );
+//
+//   if (subMode === 'choose') {
+//     return (
+//       <div className="space-y-3">
+//         <div className="grid grid-cols-1 gap-3">
+//           {/* Option 1: Scan with phone (primary) */}
+//           <button
+//             onClick={() => setSubMode('phone')}
+//             className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
+//           >
+//             <div className="flex items-start gap-4">
+//               <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
+//                 <QrCode className="w-6 h-6" />
+//               </div>
+//               <div className="flex-1">
+//                 <p className="font-semibold text-base">Scan with Phone</p>
+//                 <p className="text-sm text-muted-foreground mt-0.5">
+//                   Scan a QR code with your phone, scan the PDF417 barcode on the back of the ID, agree to the terms and sign — all sent back here. Instant, 100% accurate.
+//                 </p>
+//                 <Badge variant="secondary" className="mt-2 text-[10px]">Recommended</Badge>
+//               </div>
+//             </div>
+//           </button>
+//
+//           {/* Option 2: Use this PC's camera */}
+//           <button
+//             onClick={() => setSubMode('pc')}
+//             className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
+//           >
+//             <div className="flex items-start gap-4">
+//               <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center shrink-0">
+//                 <ScanLine className="w-6 h-6" />
+//               </div>
+//               <div className="flex-1">
+//                 <p className="font-semibold text-base">Use this PC&apos;s Camera</p>
+//                 <p className="text-sm text-muted-foreground mt-0.5">
+//                   Hold the back of the ID to this computer&apos;s camera. No terms/signature captured on the phone.
+//                 </p>
+//               </div>
+//             </div>
+//           </button>
+//         </div>
+//       </div>
+//     );
+//   }
+//
+//   return (
+//     <div className="space-y-3">
+//       <button
+//         onClick={() => setSubMode('choose')}
+//         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+//       >
+//         <ArrowLeft className="w-4 h-4" />
+//         Back to options
+//       </button>
+//       {subMode === 'phone' ? (
+//         <PhoneScanPanel mode="barcode" onReceived={handlePhoneReceived} />
+//       ) : (
+//         <BarcodeScanner onScanSuccess={onScanSuccess} />
+//       )}
+//     </div>
+//   );
+// }
+// ══════════════════════════════════════════════════════════════════════════════
+// END BARCODE SCANNER SECTION
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── Main ID Scanner Component ──────────────────────────────────────
 
@@ -743,49 +745,19 @@ export default function IdScanner({ onScanComplete, onSignatureReceived, onClose
   const [scannedData, setScannedData] = useState<ScannedIdData | null>(null);
   const [scannedImage, setScannedImage] = useState<string | undefined>();
 
-  const handleBarcodeScan = useCallback((data: ScannedIdData, imageBase64?: string) => {
-    setScannedData(data);
-    if (imageBase64) setScannedImage(imageBase64);
-    setStatus('success');
-    toast.success('ID barcode scanned successfully!');
-  }, []);
+  // BARCODE: Uncomment when re-enabling barcode scanning
+  // const handleBarcodeScan = useCallback((data: ScannedIdData, imageBase64?: string) => {
+  //   setScannedData(data);
+  //   if (imageBase64) setScannedImage(imageBase64);
+  //   setStatus('success');
+  //   toast.success('ID barcode scanned successfully!');
+  // }, []);
 
   const handleVisionScan = useCallback((data: ScannedIdData, imageBase64?: string) => {
     setScannedData(data);
     setScannedImage(imageBase64);
     setStatus('success');
     toast.success('ID scanned successfully with AI!');
-  }, []);
-
-  // Shared AI processing function used by both vision and phone-barcode flows
-  const processImageForAI = useCallback(async (dataUrl: string) => {
-    setStatus('processing');
-    try {
-      const res = await fetch('/api/scan-id', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: dataUrl }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to process ID image');
-      }
-
-      const { data } = await res.json();
-      if (!data) {
-        throw new Error('No data extracted from ID');
-      }
-
-      setScannedData(data);
-      setScannedImage(dataUrl);
-      setStatus('success');
-      toast.success('ID scanned successfully with AI!');
-    } catch (err: any) {
-      console.error('AI processing error:', err);
-      setStatus('error');
-      toast.error(err?.message || 'Failed to process ID image');
-    }
   }, []);
 
   const handleConfirm = () => {
@@ -828,8 +800,8 @@ export default function IdScanner({ onScanComplete, onSignatureReceived, onClose
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
-            {/* Option 1: Scan Barcode */}
-            <button
+            {/* BARCODE: Uncomment when re-enabling barcode scanning */}
+            {/* <button
               onClick={() => setMode('barcode')}
               className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
             >
@@ -845,23 +817,23 @@ export default function IdScanner({ onScanComplete, onSignatureReceived, onClose
                   <Badge variant="secondary" className="mt-2 text-[10px]">Recommended</Badge>
                 </div>
               </div>
-            </button>
+            </button> */}
 
-            {/* Option 2: Scan Front with AI */}
+            {/* Option 1: Scan Front with AI (Primary) */}
             <button
               onClick={() => setMode('vision')}
               className="w-full p-5 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
             >
               <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center shrink-0">
+                <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
                   <Camera className="w-6 h-6" />
                 </div>
                 <div className="flex-1">
                   <p className="font-semibold text-base">Scan Front of ID</p>
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    Take a photo of the front. AI extracts all fields automatically. Use if barcode is damaged.
+                    Take a photo of the front of the ID. AI extracts all fields automatically.
                   </p>
-                  <Badge variant="outline" className="mt-2 text-[10px]">AI Powered</Badge>
+                  <Badge variant="secondary" className="mt-2 text-[10px]">Recommended</Badge>
                 </div>
               </div>
             </button>
@@ -870,7 +842,8 @@ export default function IdScanner({ onScanComplete, onSignatureReceived, onClose
       )}
 
       {/* Scanner Area */}
-      {mode === 'barcode' && status === 'idle' && (
+      {/* BARCODE: Uncomment when re-enabling barcode scanning */}
+      {/* {mode === 'barcode' && status === 'idle' && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -888,7 +861,7 @@ export default function IdScanner({ onScanComplete, onSignatureReceived, onClose
             />
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {mode === 'vision' && status === 'idle' && (
         <Card>
@@ -931,7 +904,7 @@ export default function IdScanner({ onScanComplete, onSignatureReceived, onClose
                 <CheckCircle className="w-5 h-5 text-green-500" /> ID Scanned Successfully
               </CardTitle>
               <Badge variant="secondary" className="text-[10px]">
-                {mode === 'barcode' ? 'Barcode' : 'AI Vision'}
+                AI Vision
               </Badge>
             </div>
           </CardHeader>
