@@ -458,7 +458,13 @@ function VisionScanner({
         onSignatureReceived?.(payload.signatureDataUrl, !!payload.termsAccepted);
       }
 
-      // Prefer the uploaded image (already in the ids bucket). Fall back to base64.
+      // If phone sent parsed barcode data, use it directly
+      if (payload.parsedData) {
+        onScanSuccess(payload.parsedData, payload.imageStorageUrl || payload.imageBase64 || undefined);
+        return;
+      }
+
+      // Otherwise, phone sent a photo — process it with AI
       const imageUrl = payload.imageStorageUrl || payload.imageBase64;
       if (imageUrl) {
         processImage(imageUrl);
@@ -467,7 +473,7 @@ function VisionScanner({
         setErrorMsg('No image received from phone.');
       }
     },
-    [processImage, onSignatureReceived]
+    [processImage, onScanSuccess, onSignatureReceived]
   );
 
   const handleRetry = () => {
@@ -636,9 +642,11 @@ function VisionScanner({
 function BarcodeScannerSection({
   onScanSuccess,
   onSignatureReceived,
+  processImage,
 }: {
   onScanSuccess: (data: ScannedIdData, imageBase64?: string) => void;
   onSignatureReceived?: (signatureDataUrl: string, termsAccepted: boolean) => void;
+  processImage: (dataUrl: string) => Promise<void>;
 }) {
   const [subMode, setSubMode] = useState<'choose' | 'phone' | 'pc'>('choose');
 
@@ -647,14 +655,21 @@ function BarcodeScannerSection({
       if (payload.signatureDataUrl) {
         onSignatureReceived?.(payload.signatureDataUrl, !!payload.termsAccepted);
       }
+      // If phone sent parsed barcode data, use it directly
       if (payload.parsedData) {
         onScanSuccess(payload.parsedData, payload.imageStorageUrl || payload.imageBase64 || undefined);
+        return;
+      }
+      // Otherwise, phone sent a photo — process it with AI
+      const imageUrl = payload.imageStorageUrl || payload.imageBase64;
+      if (imageUrl) {
+        processImage(imageUrl);
       } else {
-        toast.error('No barcode data was decoded on the phone. Please try again.');
+        toast.error('No image received from phone. Please try again.');
         setSubMode('choose');
       }
     },
-    [onScanSuccess, onSignatureReceived]
+    [onScanSuccess, onSignatureReceived, processImage]
   );
 
   if (subMode === 'choose') {
@@ -740,6 +755,37 @@ export default function IdScanner({ onScanComplete, onSignatureReceived, onClose
     setScannedImage(imageBase64);
     setStatus('success');
     toast.success('ID scanned successfully with AI!');
+  }, []);
+
+  // Shared AI processing function used by both vision and phone-barcode flows
+  const processImageForAI = useCallback(async (dataUrl: string) => {
+    setStatus('processing');
+    try {
+      const res = await fetch('/api/scan-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: dataUrl }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to process ID image');
+      }
+
+      const { data } = await res.json();
+      if (!data) {
+        throw new Error('No data extracted from ID');
+      }
+
+      setScannedData(data);
+      setScannedImage(dataUrl);
+      setStatus('success');
+      toast.success('ID scanned successfully with AI!');
+    } catch (err: any) {
+      console.error('AI processing error:', err);
+      setStatus('error');
+      toast.error(err?.message || 'Failed to process ID image');
+    }
   }, []);
 
   const handleConfirm = () => {
@@ -838,6 +884,7 @@ export default function IdScanner({ onScanComplete, onSignatureReceived, onClose
             <BarcodeScannerSection
               onScanSuccess={handleBarcodeScan}
               onSignatureReceived={onSignatureReceived}
+              processImage={processImageForAI}
             />
           </CardContent>
         </Card>
@@ -858,6 +905,19 @@ export default function IdScanner({ onScanComplete, onSignatureReceived, onClose
               onScanSuccess={handleVisionScan}
               onSignatureReceived={onSignatureReceived}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Processing - AI extracting data */}
+      {status === 'processing' && (
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-muted-foreground" />
+              <p className="text-sm font-medium">Analyzing ID with AI...</p>
+              <p className="text-xs text-muted-foreground mt-1">Extracting information from the photo</p>
+            </div>
           </CardContent>
         </Card>
       )}

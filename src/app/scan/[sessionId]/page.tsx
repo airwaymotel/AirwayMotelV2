@@ -4,11 +4,10 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
   Camera, CheckCircle, RefreshCcw, Loader2, CameraOff, AlertTriangle, ShieldAlert,
-  Upload, AlertCircle, ScanLine,
+  Upload, AlertCircle,
 } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
 import { supabase } from '@/lib/supabase';
-import { parseAAMVA, partialScannedIdFromRaw, type ScannedIdData } from '@/lib/parse-aamva';
 
 const TERMS_HEADER =
   'By signing below, as a guest of AIRWAY MOTEL you state that you have fully read the statements, conditions below and agree to abide by them, without exception, while staying at AIRWAY MOTEL.';
@@ -33,10 +32,6 @@ const CAM_STATUS = {
 
 type CamStatus = (typeof CAM_STATUS)[keyof typeof CAM_STATUS];
 
-// Barcode scanner status (separate from camera status, since barcode mode
-// only needs the camera while actively decoding).
-type BarcodeStatus = 'idle' | 'starting' | 'scanning' | 'error';
-
 type Step = 'capture' | 'signature' | 'success';
 
 export default function MobileScanPage() {
@@ -45,22 +40,21 @@ export default function MobileScanPage() {
   const sessionId = params.sessionId as string;
   const rawMode = searchParams.get('mode');
 
-  // 'barcode' vs 'photo' (front AI). 'id-scan' (legacy) maps to 'photo'.
+  // 'barcode' mode now falls back to photo capture (phones can't scan PDF417 reliably).
+  // 'photo' mode = front-of-ID AI scan. 'signature' mode = terms + signature only.
   const isBarcodeMode = rawMode === 'barcode';
   const isSignatureMode = rawMode === 'signature';
+  // Treat barcode mode as photo mode on the phone — take a picture, let desktop AI extract data.
+  const usePhotoCapture = !isSignatureMode;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sigCanvas = useRef<SignatureCanvas>(null);
-  const barcodeContainerRef = useRef<HTMLDivElement>(null);
-  const html5QrRef = useRef<any>(null);
 
   const [camStatus, setCamStatus] = useState<CamStatus>(CAM_STATUS.REQUESTING);
-  const [barcodeStatus, setBarcodeStatus] = useState<BarcodeStatus>('idle');
   const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [parsedId, setParsedId] = useState<ScannedIdData | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string>('');
   const [step, setStep] = useState<Step>(isSignatureMode ? 'signature' : 'capture');
@@ -69,15 +63,6 @@ export default function MobileScanPage() {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
-    }
-  }, []);
-
-  // ── Barcode mode: stop the html5-qrcode scanner ──
-  const stopBarcodeScanner = useCallback(() => {
-    if (html5QrRef.current) {
-      html5QrRef.current.stop().catch(() => {});
-      html5QrRef.current.clear().catch(() => {});
-      html5QrRef.current = null;
     }
   }, []);
 
@@ -125,14 +110,13 @@ export default function MobileScanPage() {
   }, [stopStream]);
 
   useEffect(() => {
-    if (!isBarcodeMode) {
+    if (usePhotoCapture) {
       startCamera();
     }
     return () => {
       stopStream();
-      stopBarcodeScanner();
     };
-  }, [isBarcodeMode, startCamera, stopStream, stopBarcodeScanner]);
+  }, [usePhotoCapture, startCamera, stopStream]);
 
   // ── Capture a frame from the video stream (photo mode) ──
   const capture = useCallback(() => {
@@ -184,83 +168,14 @@ export default function MobileScanPage() {
 
   const retake = useCallback(async () => {
     setImageSrc(null);
-    setParsedId(null);
     setStep('capture');
     setUploadError('');
-    if (isBarcodeMode) {
-      // Restart the barcode scanner
-      setBarcodeStatus('idle');
-    } else {
-      await startCamera();
-    }
-  }, [startCamera, isBarcodeMode]);
-
-
-  const startBarcodeScanner = useCallback(async () => {
-    if (!barcodeContainerRef.current) return;
-    setBarcodeStatus('starting');
-    setUploadError('');
-
-    // Camera requires a Secure Context (HTTPS or localhost)
-    if (typeof window !== 'undefined' && !window.isSecureContext) {
-      setBarcodeStatus('error');
-      setUploadError('Secure connection required. The camera only works over HTTPS or localhost.');
-      return;
-    }
-
-    try {
-      const { Html5Qrcode } = await import('html5-qrcode');
-      const scanner = new Html5Qrcode('id-barcode-scanner');
-      html5QrRef.current = scanner;
-
-      await scanner.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 280, height: 200 },
-          // @ts-expect-error - PDF417 format constant
-          formatsToSupport: [0],
-        },
-        (decodedText: string) => {
-          // Parse immediately on decode
-          const parsed = parseAAMVA(decodedText);
-          const result = parsed || partialScannedIdFromRaw(decodedText);
-
-          // Grab a frame of the live feed for the review step
-          try {
-            const videoEl = document.querySelector('#id-barcode-scanner video') as HTMLVideoElement | null;
-            const canvasEl = canvasRef.current;
-            if (videoEl && videoEl.videoWidth && canvasEl) {
-              canvasEl.width = videoEl.videoWidth;
-              canvasEl.height = videoEl.videoHeight;
-              const ctx = canvasEl.getContext('2d');
-              if (ctx) {
-                ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
-                setImageSrc(canvasEl.toDataURL('image/jpeg', 0.92));
-              }
-            }
-          } catch {
-            // Non-critical — image is optional for barcode mode
-          }
-
-          setParsedId(result);
-          stopBarcodeScanner();
-          setBarcodeStatus('scanning');
-        },
-        () => {}
-      );
-
-      setBarcodeStatus('scanning');
-    } catch (err: any) {
-      console.error('[Barcode] scanner error:', err);
-      setBarcodeStatus('error');
-      setUploadError(err?.message || 'Failed to start camera. Please check permissions.');
-    }
-  }, [stopBarcodeScanner]);
+    // Restart camera for photo capture
+    await startCamera();
+  }, [startCamera]);
 
   const advanceToSignature = () => {
-    if (isBarcodeMode && !parsedId) return;
-    if (!isBarcodeMode && !imageSrc) return;
+    if (!imageSrc) return;
     setStep('signature');
   };
 
@@ -309,7 +224,7 @@ export default function MobileScanPage() {
           sessionId,
           imageBase64: imageSrc || undefined,
           imageStorageUrl: imageStorageUrl || undefined,
-          parsedData: isBarcodeMode ? parsedId : undefined,
+          parsedData: undefined, // Phone doesn't parse — desktop AI does
           signatureDataUrl,
           termsAccepted: true,
         }),
@@ -344,7 +259,6 @@ export default function MobileScanPage() {
   const subHeaderText = (() => {
     if (step === 'success') return 'Success';
     if (step === 'signature') return 'Check-In Agreement';
-    if (isBarcodeMode) return parsedId ? 'ID Decoded' : 'Barcode Scanner';
     if (isSignatureMode) return 'Sign the Agreement';
     return imageSrc ? 'Review Photo' : 'ID Scanner';
   })();
@@ -357,8 +271,8 @@ export default function MobileScanPage() {
         <p className="text-xs text-zinc-400">{subHeaderText}</p>
       </header>
 
-      {/* ── CAPTURE STEP ── */}
-      {step === 'capture' && !isBarcodeMode && !isSignatureMode && (
+      {/* ── CAPTURE STEP (Photo mode - works for both photo and barcode) ── */}
+      {step === 'capture' && usePhotoCapture && (
         <div className="relative flex-1 overflow-hidden bg-black flex flex-col">
           <div className="relative flex-1 overflow-hidden">
             <video
@@ -471,100 +385,6 @@ export default function MobileScanPage() {
         </div>
       )}
 
-      {/* ── CAPTURE STEP (BARCODE MODE) ── */}
-      {step === 'capture' && isBarcodeMode && (
-        <div className="relative flex-1 overflow-hidden bg-black flex flex-col">
-          <div className="relative flex-1 overflow-hidden">
-            <div id="id-barcode-scanner" ref={barcodeContainerRef} className="w-full h-full" />
-            <canvas ref={canvasRef} className="hidden" />
-
-            {imageSrc && (
-              <img
-                src={imageSrc}
-                alt="Captured ID"
-                className="absolute inset-0 h-full w-full object-contain bg-black z-10"
-              />
-            )}
-
-            {barcodeStatus === 'idle' && !imageSrc && !parsedId && (
-              <Overlay>
-                <ScanLine className="w-12 h-12 text-amber-500 mb-4" />
-                <p className="font-bold text-lg mb-1">Scan the Barcode</p>
-                <p className="text-white/60 text-sm max-w-xs mb-5">
-                  Tap below and hold the back of the ID so the PDF417 barcode is in frame.
-                </p>
-                <button
-                  onClick={startBarcodeScanner}
-                  className="px-5 py-2.5 bg-amber-600 text-white rounded-lg font-bold flex items-center gap-2"
-                >
-                  <Camera className="w-4 h-4" /> Start Scanning
-                </button>
-              </Overlay>
-            )}
-
-            {barcodeStatus === 'starting' && (
-              <Overlay>
-                <Loader2 className="w-12 h-12 text-white animate-spin mb-4" />
-                <p className="font-bold">Starting camera...</p>
-              </Overlay>
-            )}
-
-            {barcodeStatus === 'scanning' && !imageSrc && !parsedId && (
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute inset-6 border-2 border-white/30 rounded-lg" />
-                <div className="absolute bottom-4 left-0 right-0 text-center">
-                  <p className="text-white/80 text-xs bg-black/50 inline-block px-3 py-1 rounded-full">
-                    Hold the back of the ID to the camera
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {barcodeStatus === 'error' && (
-              <Overlay>
-                <CameraOff className="w-12 h-12 text-white/80 mb-4" />
-                <p className="font-bold text-lg mb-1">Camera error</p>
-                <p className="text-white/60 text-sm max-w-xs mb-5">{uploadError}</p>
-                <button
-                  onClick={() => { setBarcodeStatus('idle'); setUploadError(''); }}
-                  className="px-5 py-2.5 bg-white text-black rounded-lg font-bold flex items-center gap-2"
-                >
-                  <RefreshCcw className="w-4 h-4" /> Retry
-                </button>
-              </Overlay>
-            )}
-          </div>
-
-          <div className="z-20 bg-gradient-to-t from-black/90 to-transparent p-6 pb-10 shrink-0">
-            {parsedId ? (
-              <div className="flex gap-4 max-w-md mx-auto">
-                <button
-                  onClick={retake}
-                  className="flex-1 bg-white/15 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 backdrop-blur-md"
-                >
-                  <RefreshCcw className="w-5 h-5" /> Rescan
-                </button>
-                <button
-                  onClick={advanceToSignature}
-                  className="flex-[2] bg-amber-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2"
-                >
-                  <CheckCircle className="w-5 h-5" /> Next: Sign
-                </button>
-              </div>
-            ) : (
-              barcodeStatus === 'scanning' && (
-                <button
-                  onClick={() => { stopBarcodeScanner(); setBarcodeStatus('idle'); }}
-                  className="w-full bg-white/15 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 backdrop-blur-md"
-                >
-                  Cancel
-                </button>
-              )
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── SIGNATURE STEP ── */}
       {step === 'signature' && (
         <div className="flex-1 bg-zinc-900 overflow-hidden flex flex-col">
@@ -572,17 +392,9 @@ export default function MobileScanPage() {
             {imageSrc && (
               <div className="rounded-lg overflow-hidden border border-zinc-700">
                 <p className="text-[10px] text-zinc-500 px-2 pt-1.5 font-bold uppercase tracking-wider">
-                  {isBarcodeMode ? 'Barcode Captured' : 'ID Photo Captured'}
+                  ID Photo Captured
                 </p>
                 <img src={imageSrc} alt="Captured ID" className="w-full max-h-32 object-contain bg-black" />
-              </div>
-            )}
-
-            {isBarcodeMode && parsedId && (
-              <div className="bg-zinc-800 rounded-lg p-3 border border-zinc-700 text-sm">
-                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Decoded</p>
-                <p className="font-medium">{parsedId.fullName || `${parsedId.firstName} ${parsedId.lastName}`.trim() || '—'}</p>
-                <p className="font-mono text-xs text-zinc-300 mt-0.5">{parsedId.idNumber || '—'}</p>
               </div>
             )}
 
