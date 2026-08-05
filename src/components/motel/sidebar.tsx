@@ -40,7 +40,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   return (
     <aside className="hidden md:flex md:w-56 lg:w-64 flex-col bg-card border-r border-border h-full">
       {/* Brand */}
-      <div className="px-5 pt-6 pb-5 border-b border-border flex items-center gap-3">
+      <button onClick={() => { onTabChange('dashboard'); router.push('/'); }} className="px-5 pt-6 pb-5 border-b border-border flex items-center gap-3 cursor-pointer hover:bg-muted/50 transition-colors w-full text-left">
         <div className="shrink-0">
           <svg width="36" height="36" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="40" height="40" rx="10" fill="#f59e0b" />
@@ -57,7 +57,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             Admin
           </p>
         </div>
-      </div>
+      </button>
 
       {/* Nav */}
       <nav className="flex-1 py-4 flex flex-col">
