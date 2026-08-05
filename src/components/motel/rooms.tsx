@@ -351,7 +351,7 @@ export default function Rooms() {
 
       {/* ── Room Detail Sheet ── */}
       <Sheet open={!!selectedRoom} onOpenChange={(open) => { if (!open) { setSelectedRoom(null); setEditing(false); } }}>
-        <SheetContent className="overflow-y-auto">
+        <SheetContent className="overflow-y-auto pl-6 pr-6">
           {selectedRoom && (
             <>
               <SheetHeader>
