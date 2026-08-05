@@ -66,4 +66,13 @@ export interface Signature {
   signedAt: string;
 }
 
-export type NavTab = 'dashboard' | 'rooms' | 'check-in' | 'checkout' | 'guests';
+export type NavTab = 'dashboard' | 'rooms' | 'check-in' | 'checkout' | 'guests' | 'settings';
+
+export interface MotelSettings {
+  oneBedRate: number;
+  twoBedRate: number;
+  vatEnabled: boolean;
+  vatRate: number;
+  weeklyDiscountEnabled: boolean;
+  weeklyDiscountAmount: number;
+}

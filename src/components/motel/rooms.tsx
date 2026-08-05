@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Search, RotateCcw, User, Phone, Mail, Calendar,
   CreditCard, Shield, FileText, ArrowRight, BedSingle, BedDouble,
   ImageIcon, PenLine, Plus, Trash2, Pencil, Check, X, Loader2,
+  Settings,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,6 +42,8 @@ export default function Rooms() {
   const updateRoomStatus = useMotelStore((s) => s.updateRoomStatus);
   const updateRoom = useMotelStore((s) => s.updateRoom);
   const deleteRoom = useMotelStore((s) => s.deleteRoom);
+  const motelSettings = useMotelStore((s) => s.motelSettings);
+  const updateMotelSettings = useMotelStore((s) => s.updateMotelSettings);
 
   const [filter, setFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -63,6 +66,10 @@ export default function Rooms() {
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Settings modal
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState(motelSettings);
 
   const filteredRooms = rooms.filter((room) => {
     if (filter !== 'All') {
@@ -105,7 +112,7 @@ export default function Rooms() {
     }
     setAdding(true);
     try {
-      const rate = newRoomType === '1-bed' ? 65 : 85;
+      const rate = newRoomType === '1-bed' ? settings.oneBedRate : settings.twoBedRate;
       await addRoom({
         roomNumber: newRoomNumber.trim(),
         type: newRoomType,
@@ -156,7 +163,7 @@ export default function Rooms() {
     if (editRoomNumber !== selectedRoom.roomNumber) updates.roomNumber = editRoomNumber.trim();
     if (editRoomType !== selectedRoom.type) {
       updates.type = editRoomType;
-      updates.rate = editRoomType === '1-bed' ? 65 : 85;
+      updates.rate = editRoomType === '1-bed' ? settings.oneBedRate : settings.twoBedRate;
     }
 
 
@@ -213,6 +220,11 @@ export default function Rooms() {
 
           <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => useMotelStore.getState().loadFromSupabase()}>
             <RotateCcw className="w-4 h-4" />
+          </Button>
+
+          {/* Settings Button */}
+          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => { setSettings(motelSettings); setShowSettings(true); }}>
+            <Settings className="w-4 h-4" />
           </Button>
 
           {/* Add Room Button */}
@@ -279,8 +291,8 @@ export default function Rooms() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1-bed">1-Bed King ($65)</SelectItem>
-                    <SelectItem value="2-bed">2-Bed Queen ($85)</SelectItem>
+                    <SelectItem value="1-bed">1-Bed King (${settings.oneBedRate})</SelectItem>
+                    <SelectItem value="2-bed">2-Bed Queen (${settings.twoBedRate})</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -362,8 +374,8 @@ export default function Rooms() {
                       <Select value={editRoomType} onValueChange={(v) => setEditRoomType(v as RoomType)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="1-bed">1-Bed King ($65)</SelectItem>
-                          <SelectItem value="2-bed">2-Bed Queen ($85)</SelectItem>
+                          <SelectItem value="1-bed">1-Bed King (${settings.oneBedRate})</SelectItem>
+                          <SelectItem value="2-bed">2-Bed Queen (${settings.twoBedRate})</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -648,6 +660,104 @@ export default function Rooms() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* ── Settings Modal ── */}
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Motel Settings</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs">1-Bed Rate ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={settings.oneBedRate}
+                  onChange={(e) => setSettings({ ...settings, oneBedRate: Number(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">2-Bed Rate ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={settings.twoBedRate}
+                  onChange={(e) => setSettings({ ...settings, twoBedRate: Number(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-xs">VAT (10.75%)</Label>
+                <p className="text-[11px] text-muted-foreground">Apply VAT to room charges</p>
+              </div>
+              <Button
+                variant={settings.vatEnabled ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSettings({ ...settings, vatEnabled: !settings.vatEnabled })}
+              >
+                {settings.vatEnabled ? 'On' : 'Off'}
+              </Button>
+            </div>
+
+            {settings.vatEnabled && (
+              <div className="space-y-2 ml-4">
+                <Label className="text-xs">VAT Rate (%)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={settings.vatRate}
+                  onChange={(e) => setSettings({ ...settings, vatRate: Number(e.target.value) || 0 })}
+                />
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-xs">Weekly Discount ($200)</Label>
+                <p className="text-[11px] text-muted-foreground">Apply discount for stays of 7+ nights</p>
+              </div>
+              <Button
+                variant={settings.weeklyDiscountEnabled ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSettings({ ...settings, weeklyDiscountEnabled: !settings.weeklyDiscountEnabled })}
+              >
+                {settings.weeklyDiscountEnabled ? 'On' : 'Off'}
+              </Button>
+            </div>
+
+            {settings.weeklyDiscountEnabled && (
+              <div className="space-y-2 ml-4">
+                <Label className="text-xs">Discount Amount ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={settings.weeklyDiscountAmount}
+                  onChange={(e) => setSettings({ ...settings, weeklyDiscountAmount: Number(e.target.value) || 0 })}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSettings(false)}>Cancel</Button>
+            <Button onClick={() => { updateMotelSettings(settings); setShowSettings(false); toast.success('Settings saved'); }}>
+              Save Settings
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -215,6 +215,7 @@ const STEPS = [
   const updateRoomStatus = useMotelStore((s) => s.updateRoomStatus);
   const addActivity = useMotelStore((s) => s.addActivity);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
+  const motelSettings = useMotelStore((s) => s.motelSettings);
 
   // Step
   const [step, setStep] = useState(0);
@@ -283,7 +284,19 @@ const STEPS = [
     [rooms, roomType]
   );
   const selectedRoom = rooms.find((r) => r.id === selectedRoomId);
-  const rate = selectedRoom?.rate ?? (roomType === '1-bed' ? 65 : 85);
+  const defaultRate = roomType === '1-bed' ? motelSettings.oneBedRate : motelSettings.twoBedRate;
+  const rate = selectedRoom?.rate ?? defaultRate;
+
+  const checkInDateObj = checkInDate ? new Date(checkInDate + 'T00:00:00') : null;
+  const checkOutDateObj = checkOutDate ? new Date(checkOutDate + 'T00:00:00') : null;
+  const nights = checkInDateObj && checkOutDateObj
+    ? Math.max(1, Math.round((checkOutDateObj.getTime() - checkInDateObj.getTime()) / 86400000))
+    : 1;
+
+  const subtotal = rate * nights;
+  const vatAmount = motelSettings.vatEnabled ? subtotal * (motelSettings.vatRate / 100) : 0;
+  const weeklyDiscount = motelSettings.weeklyDiscountEnabled && nights >= 7 ? motelSettings.weeklyDiscountAmount : 0;
+  const totalDue = subtotal + vatAmount - weeklyDiscount + 20;
 
   // ── Manual file upload handler ──
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -438,32 +451,50 @@ const STEPS = [
             idState: idState || undefined,
           });
 
-      const stayId = await addStay({
-        guestId,
-        roomId: selectedRoomId,
-        checkInDate,
-        checkInTime,
-        checkOutDate,
-        checkOutTime,
-        rateAmount: rate,
-        status: 'active',
-        keyDeposit: 10,
-        tvRemoteDeposit: 10,
-      });
+       const stayId = await addStay({
+         guestId,
+         roomId: selectedRoomId,
+         checkInDate,
+         checkInTime,
+         checkOutDate,
+         checkOutTime,
+         rateAmount: rate,
+         status: 'active',
+         keyDeposit: 10,
+         tvRemoteDeposit: 10,
+       });
 
-      await addPayment({
-        stayId,
-        amount: rate,
-        method: paymentMethod,
-        description: `Room charge (1 night, ${roomType})`,
-      });
+       await addPayment({
+         stayId,
+         amount: subtotal,
+         method: paymentMethod,
+         description: `Room charge (${nights} night${nights > 1 ? 's' : ''}, ${roomType})`,
+       });
 
-      await addPayment({
-        stayId,
-        amount: 20,
-        method: paymentMethod,
-        description: 'Key + TV remote deposit',
-      });
+       if (vatAmount > 0) {
+         await addPayment({
+           stayId,
+           amount: vatAmount,
+           method: paymentMethod,
+           description: `VAT (${motelSettings.vatRate}%)`,
+         });
+       }
+
+       if (weeklyDiscount > 0) {
+         await addPayment({
+           stayId,
+           amount: -weeklyDiscount,
+           method: paymentMethod,
+           description: 'Weekly discount',
+         });
+       }
+
+       await addPayment({
+         stayId,
+         amount: 20,
+         method: paymentMethod,
+         description: 'Key + TV remote deposit',
+       });
 
       updateRoomStatus(selectedRoomId, 'occupied');
 
@@ -957,25 +988,45 @@ const STEPS = [
 
               <Separator />
 
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Room ({roomType === '1-bed' ? '1-Bed King' : '2-Bed Queen'})</span>
-                  <span className="font-medium">${rate}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Key Deposit</span>
-                  <span className="font-medium">$10</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>TV Remote Deposit</span>
-                  <span className="font-medium">$10</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between text-base font-semibold">
-                  <span>Total Due</span>
-                  <span>${rate + 20}</span>
-                </div>
-              </div>
+               <div className="space-y-2">
+                 <div className="flex justify-between text-sm">
+                   <span>Room ({roomType === '1-bed' ? '1-Bed King' : '2-Bed Queen'})</span>
+                   <span className="font-medium">${rate} × {nights}</span>
+                 </div>
+                 <div className="flex justify-between text-sm">
+                   <span>Subtotal</span>
+                   <span className="font-medium">${subtotal.toFixed(2)}</span>
+                 </div>
+                 {motelSettings.vatEnabled && (
+                   <>
+                     <div className="flex justify-between text-sm">
+                       <span>VAT ({motelSettings.vatRate}%)</span>
+                       <span className="font-medium">${vatAmount.toFixed(2)}</span>
+                     </div>
+                   </>
+                 )}
+                 {weeklyDiscount > 0 && (
+                   <>
+                     <div className="flex justify-between text-sm">
+                       <span>Weekly Discount</span>
+                       <span className="font-medium text-green-600 dark:text-green-400">-${weeklyDiscount.toFixed(2)}</span>
+                     </div>
+                   </>
+                 )}
+                 <div className="flex justify-between text-sm">
+                   <span>Key Deposit</span>
+                   <span className="font-medium">$10</span>
+                 </div>
+                 <div className="flex justify-between text-sm">
+                   <span>TV Remote Deposit</span>
+                   <span className="font-medium">$10</span>
+                 </div>
+                 <Separator />
+                 <div className="flex justify-between text-base font-semibold">
+                   <span>Total Due</span>
+                   <span>${totalDue.toFixed(2)}</span>
+                 </div>
+               </div>
             </CardContent>
           </Card>
         )}
@@ -1152,11 +1203,11 @@ const STEPS = [
                   <span className="text-muted-foreground">Check-out</span>
                   <span className="font-medium">{checkOutDate}, {checkOutTime}</span>
                 </div>
-                <Separator className="my-2" />
-                <div className="flex justify-between font-semibold">
-                  <span>Total Paid</span>
-                  <span>${rate + 20}</span>
-                </div>
+                 <Separator className="my-2" />
+                 <div className="flex justify-between font-semibold">
+                   <span>Total Paid</span>
+                   <span>${totalDue.toFixed(2)}</span>
+                 </div>
               </div>
 
               {idPhotoUrl && (

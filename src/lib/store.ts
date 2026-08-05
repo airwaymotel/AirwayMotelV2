@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Room, Guest, Stay, Payment, ActivityLog, NavTab } from './types';
+import type { Room, Guest, Stay, Payment, ActivityLog, NavTab, MotelSettings } from './types';
 import { isSupabaseConnected } from './supabase';
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -21,11 +21,12 @@ function timeNow(): string {
 // These mappers translate between the two.
 
 function mapRoomFromDb(row: Record<string, unknown>): Room {
+  const settings = get().motelSettings;
   return {
     id: row.id as string,
     roomNumber: row.room_number as string,
     type: row.type as Room['type'],
-    rate: row.type === '2-bed' ? 85 : 65,
+    rate: row.type === '2-bed' ? settings.twoBedRate : settings.oneBedRate,
     status: row.status as Room['status'],
   };
 }
@@ -77,18 +78,18 @@ function mapPaymentFromDb(row: Record<string, unknown>): Payment {
 // ── Mock Data ────────────────────────────────────────────────────
 
 const MOCK_ROOMS: Room[] = [
-  { id: 'room-101', roomNumber: '101', type: '1-bed', rate: 65, status: 'occupied' },
-  { id: 'room-102', roomNumber: '102', type: '1-bed', rate: 65, status: 'available' },
-  { id: 'room-103', roomNumber: '103', type: '2-bed', rate: 85, status: 'occupied' },
-  { id: 'room-104', roomNumber: '104', type: '1-bed', rate: 65, status: 'cleaning' },
-  { id: 'room-105', roomNumber: '105', type: '2-bed', rate: 85, status: 'available' },
-  { id: 'room-106', roomNumber: '106', type: '1-bed', rate: 65, status: 'available' },
-  { id: 'room-107', roomNumber: '107', type: '2-bed', rate: 85, status: 'maintenance' },
-  { id: 'room-108', roomNumber: '108', type: '1-bed', rate: 65, status: 'available' },
-  { id: 'room-109', roomNumber: '109', type: '2-bed', rate: 85, status: 'reserved' },
-  { id: 'room-110', roomNumber: '110', type: '1-bed', rate: 65, status: 'available' },
-  { id: 'room-111', roomNumber: '111', type: '2-bed', rate: 85, status: 'occupied' },
-  { id: 'room-112', roomNumber: '112', type: '1-bed', rate: 65, status: 'available' },
+  { id: 'room-101', roomNumber: '101', type: '1-bed', rate: 80, status: 'occupied' },
+  { id: 'room-102', roomNumber: '102', type: '1-bed', rate: 80, status: 'available' },
+  { id: 'room-103', roomNumber: '103', type: '2-bed', rate: 100, status: 'occupied' },
+  { id: 'room-104', roomNumber: '104', type: '1-bed', rate: 80, status: 'cleaning' },
+  { id: 'room-105', roomNumber: '105', type: '2-bed', rate: 100, status: 'available' },
+  { id: 'room-106', roomNumber: '106', type: '1-bed', rate: 80, status: 'available' },
+  { id: 'room-107', roomNumber: '107', type: '2-bed', rate: 100, status: 'maintenance' },
+  { id: 'room-108', roomNumber: '108', type: '1-bed', rate: 80, status: 'available' },
+  { id: 'room-109', roomNumber: '109', type: '2-bed', rate: 100, status: 'reserved' },
+  { id: 'room-110', roomNumber: '110', type: '1-bed', rate: 80, status: 'available' },
+  { id: 'room-111', roomNumber: '111', type: '2-bed', rate: 100, status: 'occupied' },
+  { id: 'room-112', roomNumber: '112', type: '1-bed', rate: 80, status: 'available' },
 ];
 
 const MOCK_GUESTS: Guest[] = [
@@ -103,20 +104,20 @@ const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString().split('T')[0];
 
 const MOCK_STAYS: Stay[] = [
-  { id: 'stay-1', guestId: 'guest-1', roomId: 'room-101', checkInDate: twoDaysAgo, checkInTime: '2:00 PM', checkOutDate: today, checkOutTime: '10:00 AM', rateAmount: 65, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: twoDaysAgo + 'T14:00:00Z' },
-  { id: 'stay-2', guestId: 'guest-2', roomId: 'room-103', checkInDate: twoDaysAgo, checkInTime: '3:30 PM', checkOutDate: today, checkOutTime: '10:00 AM', rateAmount: 85, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: twoDaysAgo + 'T15:30:00Z' },
-  { id: 'stay-3', guestId: 'guest-3', roomId: 'room-201', checkInDate: today, checkInTime: '11:00 AM', checkOutDate: tomorrow, checkOutTime: '10:00 AM', rateAmount: 65, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: today + 'T11:00:00Z' },
-  { id: 'stay-4', guestId: 'guest-4', roomId: 'room-301', checkInDate: today, checkInTime: '1:00 PM', checkOutDate: tomorrow, checkOutTime: '10:00 AM', rateAmount: 85, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: today + 'T13:00:00Z' },
+  { id: 'stay-1', guestId: 'guest-1', roomId: 'room-101', checkInDate: twoDaysAgo, checkInTime: '2:00 PM', checkOutDate: today, checkOutTime: '10:00 AM', rateAmount: 80, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: twoDaysAgo + 'T14:00:00Z' },
+  { id: 'stay-2', guestId: 'guest-2', roomId: 'room-103', checkInDate: twoDaysAgo, checkInTime: '3:30 PM', checkOutDate: today, checkOutTime: '10:00 AM', rateAmount: 100, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: twoDaysAgo + 'T15:30:00Z' },
+  { id: 'stay-3', guestId: 'guest-3', roomId: 'room-201', checkInDate: today, checkInTime: '11:00 AM', checkOutDate: tomorrow, checkOutTime: '10:00 AM', rateAmount: 80, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: today + 'T11:00:00Z' },
+  { id: 'stay-4', guestId: 'guest-4', roomId: 'room-301', checkInDate: today, checkInTime: '1:00 PM', checkOutDate: tomorrow, checkOutTime: '10:00 AM', rateAmount: 100, status: 'active', keyDeposit: 10, tvRemoteDeposit: 10, createdAt: today + 'T13:00:00Z' },
 ];
 
 const MOCK_PAYMENTS: Payment[] = [
-  { id: 'pay-1', stayId: 'stay-1', amount: 65, method: 'card', description: 'Room charge (1 night)', paidAt: twoDaysAgo + 'T14:00:00Z' },
+  { id: 'pay-1', stayId: 'stay-1', amount: 80, method: 'card', description: 'Room charge (1 night)', paidAt: twoDaysAgo + 'T14:00:00Z' },
   { id: 'pay-2', stayId: 'stay-1', amount: 20, method: 'cash', description: 'Key + TV remote deposit', paidAt: twoDaysAgo + 'T14:00:00Z' },
-  { id: 'pay-3', stayId: 'stay-2', amount: 85, method: 'cash', description: 'Room charge (1 night)', paidAt: twoDaysAgo + 'T15:30:00Z' },
+  { id: 'pay-3', stayId: 'stay-2', amount: 100, method: 'cash', description: 'Room charge (1 night)', paidAt: twoDaysAgo + 'T15:30:00Z' },
   { id: 'pay-4', stayId: 'stay-2', amount: 20, method: 'cash', description: 'Key + TV remote deposit', paidAt: twoDaysAgo + 'T15:30:00Z' },
-  { id: 'pay-5', stayId: 'stay-3', amount: 65, method: 'card', description: 'Room charge (1 night)', paidAt: today + 'T11:00:00Z' },
+  { id: 'pay-5', stayId: 'stay-3', amount: 80, method: 'card', description: 'Room charge (1 night)', paidAt: today + 'T11:00:00Z' },
   { id: 'pay-6', stayId: 'stay-3', amount: 20, method: 'card', description: 'Key + TV remote deposit', paidAt: today + 'T11:00:00Z' },
-  { id: 'pay-7', stayId: 'stay-4', amount: 85, method: 'debit', description: 'Room charge (1 night)', paidAt: today + 'T13:00:00Z' },
+  { id: 'pay-7', stayId: 'stay-4', amount: 100, method: 'debit', description: 'Room charge (1 night)', paidAt: today + 'T13:00:00Z' },
   { id: 'pay-8', stayId: 'stay-4', amount: 20, method: 'debit', description: 'Key + TV remote deposit', paidAt: today + 'T13:00:00Z' },
 ];
 
@@ -127,6 +128,29 @@ const MOCK_ACTIVITY: ActivityLog[] = [
   { id: 'log-4', guest: 'Elena Rodriguez', action: 'Check-in', room: '103', time: '3:30 PM', status: 'Success' },
   { id: 'log-5', guest: 'Mike Turner', action: 'Check-out', room: '104', time: '9:45 AM', status: 'Success' },
 ];
+
+const MOTEL_SETTINGS_KEY = 'airway_motel_settings';
+
+const DEFAULT_SETTINGS: MotelSettings = {
+  oneBedRate: 80,
+  twoBedRate: 100,
+  vatEnabled: false,
+  vatRate: 10.75,
+  weeklyDiscountEnabled: false,
+  weeklyDiscountAmount: 200,
+};
+
+function loadSettings(): MotelSettings {
+  try {
+    const raw = localStorage.getItem(MOTEL_SETTINGS_KEY);
+    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return DEFAULT_SETTINGS;
+}
+
+function saveSettings(s: MotelSettings): void {
+  try { localStorage.setItem(MOTEL_SETTINGS_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+}
 
 // ── API Fetch Helpers ────────────────────────────────────────────
 
@@ -214,6 +238,10 @@ interface MotelStore {
   getOccupiedCount: () => number;
   getAvailableCount: () => number;
   getCheckoutsToday: () => Stay[];
+
+  // Motel settings
+  motelSettings: MotelSettings;
+  updateMotelSettings: (settings: Partial<MotelSettings>) => void;
 }
 
 // ── Store ────────────────────────────────────────────────────────
@@ -227,6 +255,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
   activeTab: 'dashboard',
   isLoading: false,
   isUsingSupabase: false,
+  motelSettings: loadSettings(),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -301,6 +330,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
       if (updates.roomNumber !== undefined) snakeUpdates.room_number = updates.roomNumber;
       if (updates.type !== undefined) snakeUpdates.type = updates.type;
       if (updates.status !== undefined) snakeUpdates.status = updates.status;
+      if (updates.rate !== undefined) snakeUpdates.rate = updates.rate;
       patchApi('/api/rooms', { id: roomId, ...snakeUpdates });
     }
   },
@@ -497,5 +527,14 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
   getCheckoutsToday: () => {
     const today = todayStr();
     return get().stays.filter((s) => s.status === 'active' && s.checkOutDate === today);
+  },
+
+  // Motel settings
+  updateMotelSettings: (newSettings) => {
+    set((state) => {
+      const updated = { ...state.motelSettings, ...newSettings };
+      saveSettings(updated);
+      return { motelSettings: updated };
+    });
   },
 }));
