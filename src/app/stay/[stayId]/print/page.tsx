@@ -137,13 +137,13 @@ async function generateRegistrationPdf(stayId: string) {
   doc.setLineWidth(0.4);
   doc.rect(rightColX, y, rightColW, boxHeight);
 
-  let innerY = y + 7;
-  const lineSpacing = 7.5;
+  let innerY = y + 8;
+  const lineSpacing = 8;
   const labelX = rightColX + 3;
   const valueX = rightColX + rightColW - 3;
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
   doc.text('ROOM #', labelX, innerY);
   doc.text(room.roomNumber || '___', valueX, innerY, { align: 'right' });
@@ -153,26 +153,26 @@ async function generateRegistrationPdf(stayId: string) {
   doc.text(String(stay.rateAmount || '___'), valueX, innerY, { align: 'right' });
   innerY += lineSpacing;
 
-  doc.setFontSize(8);
+  doc.setFontSize(10);
   const checkY = innerY;
   doc.text('CASH', labelX, checkY);
-  doc.rect(labelX + 12, checkY - 3, 3.5, 3.5);
+  doc.rect(labelX + 14, checkY - 3.5, 4, 4);
   if (hasCash) {
     doc.setFont('helvetica', 'bold');
-    doc.text('X', labelX + 13, checkY - 0.2);
+    doc.text('X', labelX + 15, checkY - 0.2);
   }
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text('CREDIT', labelX + 22, checkY);
-  doc.rect(labelX + 36, checkY - 3, 3.5, 3.5);
+  doc.setFontSize(10);
+  doc.text('CREDIT', labelX + 26, checkY);
+  doc.rect(labelX + 42, checkY - 3.5, 4, 4);
   if (hasCard) {
-    doc.text('X', labelX + 37, checkY - 0.2);
+    doc.text('X', labelX + 43, checkY - 0.2);
   }
   innerY += lineSpacing;
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(11);
   doc.text('TOTAL AMOUNT PAID $', labelX, innerY);
   doc.text(String(totalAmount || '___'), valueX, innerY, { align: 'right' });
 
@@ -180,15 +180,15 @@ async function generateRegistrationPdf(stayId: string) {
 
   // ── Dates Row ──
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(9);
   doc.setTextColor(0, 0, 0);
 
-  const dateFieldW = 28;
-  const timeFieldW = 18;
+  const dateFieldW = 30;
+  const timeFieldW = 20;
   let dx = margin;
 
   doc.text('CHECK-IN DATE', dx, y);
-  dx += 24;
+  dx += 26;
   doc.rect(dx, y - 3.5, dateFieldW, 5);
   doc.setFont('helvetica', 'normal');
   doc.text(stay.checkInDate || '', dx + 1, y);
@@ -196,7 +196,7 @@ async function generateRegistrationPdf(stayId: string) {
 
   doc.setFont('helvetica', 'bold');
   doc.text('CHECK-IN TIME', dx, y);
-  dx += 22;
+  dx += 24;
   doc.rect(dx, y - 3.5, timeFieldW, 5);
   doc.setFont('helvetica', 'normal');
   doc.text(stay.checkInTime || '', dx + 1, y);
@@ -204,7 +204,7 @@ async function generateRegistrationPdf(stayId: string) {
 
   doc.setFont('helvetica', 'bold');
   doc.text('CHECK-OUT DATE', dx, y);
-  dx += 24;
+  dx += 26;
   doc.rect(dx, y - 3.5, dateFieldW, 5);
   doc.setFont('helvetica', 'normal');
   doc.text(stay.checkOutDate || '', dx + 1, y);
@@ -212,7 +212,7 @@ async function generateRegistrationPdf(stayId: string) {
 
   doc.setFont('helvetica', 'bold');
   doc.text('CHECK-OUT TIME', dx, y);
-  dx += 22;
+  dx += 24;
   doc.rect(dx, y - 3.5, timeFieldW, 5);
   doc.setFont('helvetica', 'normal');
   doc.text('10 AM', dx + 1, y);
@@ -222,22 +222,22 @@ async function generateRegistrationPdf(stayId: string) {
   // ── Vehicle Row ──
   dx = margin;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(9);
 
   const vehicleFields = [
-    { label: 'MAKE', w: 28 },
-    { label: 'MODEL', w: 28 },
-    { label: 'LICENSE #', w: 28 },
-    { label: 'COLOR', w: 22 },
-    { label: 'YEAR', w: 18 },
+    { label: 'MAKE', w: 30 },
+    { label: 'MODEL', w: 30 },
+    { label: 'LICENSE #', w: 30 },
+    { label: 'COLOR', w: 24 },
+    { label: 'YEAR', w: 20 },
   ];
 
   doc.text('VEHICLE INFO:', dx, y);
-  dx += 22;
+  dx += 24;
 
   vehicleFields.forEach((field) => {
     doc.text(field.label, dx, y);
-    dx += field.label.length * 2 + 2;
+    dx += field.label.length * 2.2 + 2;
     doc.rect(dx, y - 3.5, field.w, 5);
     dx += field.w + 3;
   });
@@ -246,27 +246,27 @@ async function generateRegistrationPdf(stayId: string) {
 
   // ── Agreement Header ──
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
   const agreementText = 'By signing below, as a guest of AIRWAY MOTEL you state that you have fully read the statements conditions below and agree to abide by them, without exception, while staying at AIRWAY MOTEL.';
   const agreementLines = doc.splitTextToSize(agreementText, contentWidth);
   doc.text(agreementLines, margin, y);
-  y += agreementLines.length * 3.5 + 3;
+  y += agreementLines.length * 4 + 3;
 
   // ── Terms ──
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
+  doc.setFontSize(8.5);
   TERMS.forEach((term, i) => {
     const termLines = doc.splitTextToSize(`${i + 1}. ${term}`, contentWidth - 6);
     doc.text(termLines, margin + 4, y);
-    y += termLines.length * 2.8 + 1;
+    y += termLines.length * 3.2 + 1;
   });
 
   y += 5;
 
   // ── Signature Line 1 ──
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
 
   const sigLineStart = margin;
@@ -283,15 +283,15 @@ async function generateRegistrationPdf(stayId: string) {
   doc.text('DATE', dateLineStart, y);
   doc.line(dateLineStart + 10, y, dateLineEnd, y);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
+  doc.setFontSize(8);
   doc.text(stay.checkInDate || '', dateLineStart + 11, y - 1);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(10);
   doc.text('PHONE #', phoneLineStart, y);
   doc.line(phoneLineStart + 15, y, phoneLineEnd, y);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
+  doc.setFontSize(8);
   doc.text(guest.phone || '', phoneLineStart + 16, y - 1);
 
   if (signatureUrl) {
@@ -306,7 +306,7 @@ async function generateRegistrationPdf(stayId: string) {
 
   // ── Signature Line 2 (blank) ──
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(10);
 
   doc.text('GUEST SIGNATURE', sigLineStart, y);
   doc.line(sigLineStart + 28, y, sigLineEnd, y);
