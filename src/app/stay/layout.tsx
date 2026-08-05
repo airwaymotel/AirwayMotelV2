@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Search, Sun, Moon } from 'lucide-react';
+import { Search, Sun, Moon, Loader2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useMotelStore } from '@/lib/store';
 import Sidebar, { MobileNav } from '@/components/motel/sidebar';
@@ -14,6 +14,8 @@ import { Badge } from '@/components/ui/badge';
 export default function StayLayout({ children }: { children: React.ReactNode }) {
   const activeTab = useMotelStore((s) => s.activeTab);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
+  const isLoading = useMotelStore((s) => s.isLoading);
+  const isUsingSupabase = useMotelStore((s) => s.isUsingSupabase);
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
 
@@ -28,6 +30,20 @@ export default function StayLayout({ children }: { children: React.ReactNode }) 
 
   if (pathname.endsWith('/print')) {
     return <AuthGuard>{children}</AuthGuard>;
+  }
+
+  // Show loading spinner while Supabase data is loading
+  if (isUsingSupabase && isLoading) {
+    return (
+      <AuthGuard>
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-muted-foreground" />
+            <p className="text-muted-foreground text-sm">Loading...</p>
+          </div>
+        </div>
+      </AuthGuard>
+    );
   }
 
   return (

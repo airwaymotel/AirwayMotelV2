@@ -166,7 +166,7 @@ export default function GuestDetailsPage() {
             return { stay, room, payments: stayPayments, totalPaid };
           });
 
-          setData({ guest, stays: stayDetails, signatures: [] });
+          setData({ guest, stayHistory: stayDetails, signatures: [] });
         }
       } catch (err) {
         console.error('Failed to load guest details:', err);
