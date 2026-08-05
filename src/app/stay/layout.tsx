@@ -2,24 +2,23 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Search, Sun, Moon, Loader2 } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useMotelStore } from '@/lib/store';
 import Sidebar, { MobileNav } from '@/components/motel/sidebar';
 import AuthGuard from '@/components/auth-guard';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Skeleton from '@/components/ui/skeleton';
 
 export default function StayLayout({ children }: { children: React.ReactNode }) {
   const activeTab = useMotelStore((s) => s.activeTab);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
+  const dataLoaded = useMotelStore((s) => s.dataLoaded);
   const isLoading = useMotelStore((s) => s.isLoading);
-  const isUsingSupabase = useMotelStore((s) => s.isUsingSupabase);
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
 
-  // Load data from Supabase if connected
   const loadFromSupabase = useMotelStore((s) => s.loadFromSupabase);
   useEffect(() => {
     loadFromSupabase();
@@ -32,14 +31,31 @@ export default function StayLayout({ children }: { children: React.ReactNode }) 
     return <AuthGuard>{children}</AuthGuard>;
   }
 
-  // Show loading spinner while Supabase data is loading
-  if (isUsingSupabase && isLoading) {
+  if (!dataLoaded || isLoading) {
     return (
       <AuthGuard>
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-muted-foreground" />
-            <p className="text-muted-foreground text-sm">Loading...</p>
+        <div className="flex h-screen bg-background">
+          <div className="hidden md:flex w-56 border-r border-border bg-card p-4 space-y-4 flex-col">
+            <Skeleton className="h-8 w-32" />
+            <div className="space-y-2 mt-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-9 w-full rounded-md" />
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 flex flex-col">
+            <div className="h-14 border-b border-border bg-card flex items-center px-6">
+              <Skeleton className="h-4 w-48" />
+            </div>
+            <div className="flex-1 p-6 space-y-4">
+              <Skeleton className="h-8 w-64" />
+              <Skeleton className="h-4 w-96" />
+              <div className="grid gap-4 md:grid-cols-3 mt-6">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-32 rounded-lg" />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </AuthGuard>

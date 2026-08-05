@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Sun, Moon, User, DoorOpen, Loader2 } from 'lucide-react';
+import { Search, Sun, Moon, User, DoorOpen } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useRouter } from 'next/navigation';
 import { useMotelStore } from '@/lib/store';
@@ -15,6 +15,7 @@ import AuthGuard from '@/components/auth-guard';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { PageSkeleton } from '@/components/ui/skeleton';
 import type { NavTab } from '@/lib/types';
 
 export default function Home() {
@@ -251,12 +252,7 @@ export default function Home() {
             {/* Content */}
             <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
               {!dataLoaded || isLoading ? (
-                <div className="flex items-center justify-center h-full min-h-[60vh]">
-                  <div className="text-center">
-                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-muted-foreground" />
-                    <p className="text-muted-foreground text-sm">Loading data...</p>
-                  </div>
-                </div>
+                <PageSkeleton />
               ) : (
                 renderContent()
               )}
