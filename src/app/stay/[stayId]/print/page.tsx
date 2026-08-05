@@ -259,7 +259,7 @@ async function generateRegistrationPdf(stayId: string) {
   TERMS.forEach((term, i) => {
     const termLines = doc.splitTextToSize(`${i + 1}. ${term}`, contentWidth - 6);
     doc.text(termLines, margin + 4, y);
-    y += termLines.length * 3.8 + 1;
+    y += termLines.length * 3.8 + 3;
   });
 
   y += 5;
