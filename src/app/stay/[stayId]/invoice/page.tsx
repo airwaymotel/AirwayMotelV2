@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useMotelStore } from '@/lib/store';
 import type { Guest, Room, Stay, Payment } from '@/lib/types';
 import { jsPDF } from 'jspdf';
+import { Download, Loader2, FileText } from 'lucide-react';
 
 interface PrintData {
   stay: Stay;
@@ -44,7 +45,6 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   doc.setTextColor(161, 161, 170);
   doc.text('AIRWAY MOTEL — GUEST RECEIPT', margin, y + 11);
 
-  // Motel info (right side)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(217, 119, 6);
@@ -57,7 +57,6 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   doc.text('Denver, CO 80202', pageWidth - margin, y + 13, { align: 'right' });
   doc.text('(555) 123-4567', pageWidth - margin, y + 17, { align: 'right' });
 
-  // Divider
   y += 24;
   doc.setDrawColor(229, 229, 229);
   doc.setLineWidth(0.5);
@@ -65,7 +64,6 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   y += 8;
 
   // ── Guest & Stay Info ──
-  // Guest (left)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6);
   doc.setTextColor(161, 161, 170);
@@ -82,7 +80,6 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   doc.text(`ID: ${guest.idNumber || 'N/A'}`, margin, y + 11);
   doc.text(`Phone: ${guest.phone || 'N/A'}`, margin, y + 15.5);
 
-  // Stay details (right)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6);
   doc.setTextColor(161, 161, 170);
@@ -99,7 +96,6 @@ function generateReceiptPdf(data: PrintData): jsPDF {
 
   y += 28;
 
-  // ── Charges Table ──
   doc.setDrawColor(39, 39, 42);
   doc.setLineWidth(0.5);
   doc.line(margin, y, pageWidth - margin, y);
@@ -124,7 +120,6 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   doc.text(`$${roomTotal.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
   y += 8;
 
-  // ── Total ──
   doc.setDrawColor(229, 229, 229);
   doc.setLineWidth(0.3);
   doc.line(margin, y, pageWidth - margin, y);
@@ -136,7 +131,6 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   doc.text(`$${roomTotal.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
   y += 7;
 
-  // Total box
   doc.setFillColor(245, 245, 245);
   doc.rect(margin, y - 2, contentWidth, 10, 'F');
   doc.setDrawColor(39, 39, 42);
@@ -149,14 +143,12 @@ function generateReceiptPdf(data: PrintData): jsPDF {
   doc.text(`$${roomTotal.toFixed(2)}`, pageWidth - margin - 3, y + 5, { align: 'right' });
   y += 16;
 
-  // ── Payment Info ──
   if (totalCashPaid > 0) {
     doc.setFillColor(240, 253, 244);
     doc.roundedRect(margin, y, contentWidth, 12, 1.5, 1.5, 'F');
     doc.setDrawColor(187, 247, 208);
     doc.setLineWidth(0.3);
     doc.roundedRect(margin, y, contentWidth, 12, 1.5, 1.5, 'S');
-
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(22, 101, 52);
@@ -174,7 +166,6 @@ function generateReceiptPdf(data: PrintData): jsPDF {
     doc.setDrawColor(191, 219, 254);
     doc.setLineWidth(0.3);
     doc.roundedRect(margin, y, contentWidth, 12, 1.5, 1.5, 'S');
-
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(30, 64, 175);
@@ -186,12 +177,10 @@ function generateReceiptPdf(data: PrintData): jsPDF {
     y += 16;
   }
 
-  // ── Footer ──
   const footerY = 255;
   doc.setDrawColor(229, 229, 229);
   doc.setLineWidth(0.3);
   doc.line(margin, footerY, pageWidth - margin, footerY);
-
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(161, 161, 170);
@@ -212,13 +201,14 @@ export default function InvoicePage() {
 
   const [data, setData] = useState<PrintData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(true);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     async function load() {
       if (!stayId) return;
       try {
-        // Try Supabase first with joined query
         if (supabase) {
           const { data: stayRow, error: stayErr } = await supabase
             .from('stays')
@@ -280,7 +270,6 @@ export default function InvoicePage() {
           }
         }
 
-        // Fallback to local store
         const stay = stays.find((s) => s.id === stayId);
         if (!stay) throw new Error('Stay not found');
         const guest = guests.find((g) => g.id === stay.guestId);
@@ -298,46 +287,101 @@ export default function InvoicePage() {
     load();
   }, [stayId, stays, guests, rooms, payments]);
 
-  // Generate and download PDF when data loads
+  // Generate PDF and create preview URL
   useEffect(() => {
     if (data) {
-      const timer = setTimeout(() => {
-        try {
-          const doc = generateReceiptPdf(data);
-          const fileName = `receipt_${data.guest.lastName || 'guest'}_${data.room.roomNumber || 'room'}.pdf`;
-          doc.save(fileName);
-          setGenerating(false);
-          setTimeout(() => window.close(), 2000);
-        } catch (err) {
-          console.error('PDF generation error:', err);
-          setError('Failed to generate PDF');
-          setGenerating(false);
-        }
-      }, 300);
-      return () => clearTimeout(timer);
+      try {
+        const doc = generateReceiptPdf(data);
+        const blob = doc.output('blob');
+        const url = URL.createObjectURL(blob);
+        setPdfUrl(url);
+        setFileName(`receipt_${data.guest.lastName || 'guest'}_${data.room.roomNumber || 'room'}`);
+        setReady(true);
+      } catch (err) {
+        console.error('PDF generation error:', err);
+        setError('Failed to generate PDF');
+      }
     }
   }, [data]);
 
+  const handleDownload = () => {
+    if (!pdfUrl || !fileName) return;
+    const a = document.createElement('a');
+    a.href = pdfUrl;
+    a.download = `${fileName}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   if (error) {
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        fontFamily: 'sans-serif',
-        background: '#fafafa',
-      }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif', background: '#fafafa' }}>
         <p style={{ color: '#dc2626', fontWeight: 500 }}>{error}</p>
+        <button onClick={() => window.close()} style={{ marginTop: '16px', padding: '8px 16px', background: '#18181b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>Close</button>
+      </div>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif', background: '#fafafa' }}>
+        <Loader2 style={{ width: '32px', height: '32px', animation: 'spin 0.8s linear infinite', color: '#a1a1aa' }} />
+        <p style={{ marginTop: '16px', color: '#71717a', fontSize: '14px' }}>Generating PDF...</p>
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', fontFamily: 'sans-serif', background: '#f5f5f5', display: 'flex', flexDirection: 'column' }}>
+      {/* Top bar with filename input and download button */}
+      <div style={{ background: 'white', borderBottom: '1px solid #e5e5e5', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <FileText style={{ width: '20px', height: '20px', color: '#71717a' }} />
+        <span style={{ fontSize: '14px', fontWeight: 600, color: '#18181b' }}>Receipt Preview</span>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input
+            type="text"
+            value={fileName}
+            onChange={(e) => setFileName(e.target.value)}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #d4d4d8',
+              borderRadius: '6px',
+              fontSize: '13px',
+              width: '280px',
+              outline: 'none',
+            }}
+          />
+          <span style={{ fontSize: '13px', color: '#71717a' }}>.pdf</span>
+        </div>
         <button
-          onClick={() => window.close()}
+          onClick={handleDownload}
           style={{
-            marginTop: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
             padding: '8px 16px',
             background: '#18181b',
             color: 'white',
             border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: 500,
+          }}
+        >
+          <Download style={{ width: '14px', height: '14px' }} />
+          Download PDF
+        </button>
+        <button
+          onClick={() => window.close()}
+          style={{
+            padding: '8px 12px',
+            background: 'transparent',
+            color: '#71717a',
+            border: '1px solid #d4d4d8',
             borderRadius: '6px',
             cursor: 'pointer',
             fontSize: '13px',
@@ -346,69 +390,22 @@ export default function InvoicePage() {
           Close
         </button>
       </div>
-    );
-  }
 
-  if (generating) {
-    return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        fontFamily: 'sans-serif',
-        background: '#fafafa',
-      }}>
-        <div style={{
-          width: '32px',
-          height: '32px',
-          border: '3px solid #e5e5e5',
-          borderTopColor: '#d97706',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-        <p style={{ marginTop: '16px', color: '#71717a', fontSize: '14px' }}>Generating PDF receipt...</p>
-        <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      fontFamily: 'sans-serif',
-      background: '#fafafa',
-    }}>
-      <div style={{
-        background: 'white',
-        padding: '32px',
-        borderRadius: '8px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        textAlign: 'center',
-      }}>
-        <div style={{ fontSize: '32px', marginBottom: '12px' }}>&#10003;</div>
-        <p style={{ fontWeight: 600, color: '#18181b', marginBottom: '4px' }}>PDF Downloaded!</p>
-        <p style={{ color: '#71717a', fontSize: '13px' }}>Check your downloads folder.</p>
-        <button
-          onClick={() => window.close()}
-          style={{
-            marginTop: '16px',
-            padding: '8px 20px',
-            background: '#18181b',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
-        >
-          Close Tab
-        </button>
+      {/* PDF Preview */}
+      <div style={{ flex: 1, padding: '20px', display: 'flex', justifyContent: 'center' }}>
+        {pdfUrl && (
+          <iframe
+            src={pdfUrl}
+            style={{
+              width: '100%',
+              maxWidth: '900px',
+              height: 'calc(100vh - 80px)',
+              border: 'none',
+              borderRadius: '8px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            }}
+          />
+        )}
       </div>
     </div>
   );

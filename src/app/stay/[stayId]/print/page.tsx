@@ -1,659 +1,448 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { useMotelStore } from '@/lib/store';
-import type { Guest, Room, Stay, Payment } from '@/lib/types';
+import { supabase } from '@/lib/supabase';
 import { jsPDF } from 'jspdf';
+import { Download, Loader2, FileText } from 'lucide-react';
 
-interface SignatureRecord {
-  id: string;
-  stay_id: string;
-  guest_id: string;
-  signature_data_url: string;
-  signed_at: string;
-}
-
-interface PrintData {
-  stay: Stay;
-  guest: Guest;
-  room: Room;
-  payments: Payment[];
-  signatures: SignatureRecord[];
-}
-
-const TERMS = [
-  'Checkout time is 10 AM on date of checkout.',
-  'A fee of $10 dollars per hour will be assessed for each hour guest stays past checkout time.',
-  'Guests may request refund of room rent within five (5) minutes of check-in time if room unsatisfactory. NO refunds will be given outside this time for any reason.',
-  'The following WILL NOT be tolerated during your stay at AIRWAY MOTEL, for any reason: Illicit drug activity, solicitation (prostitution), illegal weapon possession, or any activities that would pose a danger to guests, staff, general public or in violation of any state/county/city municipal code.',
-  'Management reserves the right to EVICT any guest or visitors AT ANY TIME, without refund, for any damage to property, harassment of other guests or staff, causing harm to others, refusal to pay rent fees, allowing/having unregistered visitors in room, participating in any illegal or suspicious activities or any other management policies/verbal directions. Any person(s) can be barred from entering AIRWAY MOTEL property at any time.',
-  'Management reserves the right to enter any room at any time, for inspection, for repairs, for cleaning, pest control measures, or other actions to maintain room/facilities. Management/staff will knock before entering room.',
-  'AIRWAY MOTEL, management/staff, does not/will not assume any responsibility for any, lost, stolen, or damaged personal items/valuables or vehicles. AIRWAY MOTEL, management/staff does not/will not assume any responsibility for any accident(s), personal injury or death(s) occurring on property and shall not be held liable of the for mentioned reason(s).',
-  'Upon check-out, eviction, or nonpayment of room rental fee, AIRWAY MOTEL/management/staff will assume and all properties including valuables left in room/on property were left intentionally and assumes the rights to the a for mentioned items. Should guest/tenant leave by circumstances beyond their control, management at its discretion, will pack and store guest/tenant belongings for a period of 30 days at a fee of $200 dollars, paid prior to recovery of items. Note: Any items that are excessively large (furniture and appliances), non-servable, perishable, unsafe will not be stored.',
-  'Any tenant who commits, conducts, facilitates, allows, permits, or fails on Airway Motel property any public nuisance as defined in section 37-50 (c) or (d) of the Denver Revised Municipal Code, or any other activity prohibited by law or the Denver Revised Municipal Code shall be subject to immediate eviction.',
-];
-
-// Fetch an image URL and convert to base64 data URL
-async function imageToBase64(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return new Promise((resolve) => {
+function fetchImageAsBase64(url: string): Promise<string | null> {
+  return fetch(url)
+    .then(res => res.blob())
+    .then(blob => new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
+    }))
+    .catch(() => null);
 }
 
-async function generateRegistrationPdf(data: PrintData): Promise<jsPDF> {
-  const { stay, guest, room, payments, signatures } = data;
-  const doc = new jsPDF({ unit: 'mm', format: 'letter' });
+function imageToBase64(url: string): Promise<string | null> {
+  if (url.startsWith('data:')) return Promise.resolve(url);
+  return fetchImageAsBase64(url);
+}
 
+async function generateRegistrationPdf(stayId: string) {
+  const stay = useMotelStore.getState().stays.find(s => s.id === stayId);
+  if (!stay) throw new Error('Stay not found');
+  const guest = useMotelStore.getState().guests.find(g => g.id === stay.guestId);
+  if (!guest) throw new Error('Guest not found');
+  const room = useMotelStore.getState().rooms.find(r => r.id === stay.roomId);
+  if (!room) throw new Error('Room not found');
+  const settings = useMotelStore.getState().settings;
+
+  let idBase64: string | null = null;
+  if (guest.idPhotoUrl) {
+    idBase64 = await imageToBase64(guest.idPhotoUrl);
+  }
+
+  const doc = new jsPDF({ unit: 'mm', format: 'letter' });
   const pageWidth = 215.9;
-  const margin = 14;
-  const contentWidth = pageWidth - margin * 2;
+  const margin = 16;
+  const leftCol = margin;
+  const rightCol = 115;
   let y = margin;
 
-  const totalAmount = payments.reduce((acc, p) => acc + p.amount, 0);
-  const hasCash = payments.some(p => p.method === 'cash');
-  const hasCard = payments.some(p => p.method !== 'cash');
-  const signatureUrl = signatures.length > 0 ? signatures[0].signature_data_url : null;
+  // ── Header ──
+  doc.setFillColor(254, 249, 195);
+  doc.rect(0, 0, pageWidth, 32, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Airway Motel', leftCol, 18);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(68, 68, 68);
+  doc.text('123 Motel Way · Denver, CO 80202 · (555) 123-4567', leftCol, 24);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('REGISTRATION CARD', rightCol, 22);
+  y = 40;
 
-  // ── Load ID image if available ──
-  let idImageBase64: string | null = null;
-  let idImageType: 'JPEG' | 'PNG' = 'JPEG';
-  if (guest.idPhotoUrl) {
-    const base64 = await imageToBase64(guest.idPhotoUrl);
-    if (base64) {
-      idImageBase64 = base64;
-      idImageType = base64.includes('image/png') ? 'PNG' : 'JPEG';
-    }
+  // ── Terms & Conditions ──
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Terms & Conditions', leftCol, y + 4);
+  y += 10;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(51, 51, 51);
+  const terms = [
+    'Payment is due at the time of check-in. We accept cash and card.',
+    'Check-out time is 12:00 PM. Late check-out may result in additional charges.',
+    'Guests are responsible for any damages to the room or its contents.',
+    'Smoking is not permitted inside the room. A cleaning fee will be charged for violations.',
+    'The motel is not responsible for any lost, stolen, or damaged personal property.',
+    'Quiet hours are observed from 10:00 PM to 8:00 AM.',
+    'The registered guest must be at least 18 years of age.',
+    'All local, state, and federal laws must be obeyed on the premises.',
+    'The motel reserves the right to refuse service or evict guests for disruptive behavior.',
+  ];
+  const termLineHeight = 3.0;
+  terms.forEach(term => {
+    doc.text('• ' + term, leftCol + 2, y);
+    y += termLineHeight;
+  });
+  y += 6;
+
+  // ── Guest Info ──
+  const guestInfoY = y;
+  const halfWidth = (pageWidth - margin * 2) / 2;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Guest Information', leftCol, guestInfoY);
+  doc.text('Payment Information', rightCol, guestInfoY);
+  doc.setDrawColor(156, 163, 175);
+  doc.setLineWidth(0.1);
+  doc.line(leftCol, guestInfoY + 1.5, leftCol + halfWidth - 5, guestInfoY + 1.5);
+  doc.line(rightCol, guestInfoY + 1.5, rightCol + halfWidth - 5, guestInfoY + 1.5);
+  y += 6;
+
+  // ── Guest Info Fields ──
+  const colGap = 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const labelX = leftCol + 3;
+  const valueX = leftCol + 28;
+  const lineLen = halfWidth - 12;
+  const rowH = 6;
+
+  const guestName = `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || '___________________________';
+  doc.text('Name:', leftCol, y);
+  doc.text(guestName, leftCol + 18, y);
+  doc.line(leftCol + 18, y + 1, leftCol + halfWidth - 5, y + 1);
+  y += rowH;
+
+  const idType = guest.idType ? guest.idType.toUpperCase() : '___________________________';
+  doc.text('ID Type:', leftCol, y);
+  doc.text(idType, leftCol + 18, y);
+  doc.line(leftCol + 18, y + 1, leftCol + halfWidth - 5, y + 1);
+  y += rowH;
+
+  const idNumber = guest.idNumber || '___________________________';
+  doc.text('ID Number:', leftCol, y);
+  doc.text(idNumber, leftCol + 18, y);
+  doc.line(leftCol + 18, y + 1, leftCol + halfWidth - 5, y + 1);
+  y += rowH;
+
+  const phone = guest.phone || '___________________________';
+  doc.text('Phone:', leftCol, y);
+  doc.text(phone, leftCol + 18, y);
+  doc.line(leftCol + 18, y + 1, leftCol + halfWidth - 5, y + 1);
+  y += rowH;
+
+  const email = guest.email || '___________________________';
+  doc.text('Email:', leftCol, y);
+  doc.text(email, leftCol + 18, y);
+  doc.line(leftCol + 18, y + 1, leftCol + halfWidth - 5, y + 1);
+  y += rowH;
+
+  doc.text('Date of Birth:', leftCol, y);
+  doc.text(guest.dateOfBirth || '___/___/______', leftCol + 18, y);
+  doc.line(leftCol + 18, y + 1, leftCol + halfWidth - 5, y + 1);
+  y += rowH + 4;
+
+  doc.text('Address:', leftCol, y);
+  doc.line(labelX, y + 1, leftCol + lineLen, y + 1);
+  y += rowH;
+  doc.line(labelX, y + 1, leftCol + lineLen, y + 1);
+  y += rowH;
+
+  // ── Payment Info Fields ──
+  const pLabelX = rightCol + 3;
+  const pValueX = rightCol + 28;
+  let pY = guestInfoY + 8;
+  const pLineLen = halfWidth - 12;
+
+  doc.text('Room #:', rightCol, pY);
+  doc.text(room.roomNumber || '___________', pValueX, pY);
+  doc.line(pValueX, pY + 1, rightCol + pLineLen, pY + 1);
+  pY += rowH;
+
+  const nights = Math.max(1, Math.round((new Date(stay.checkOutDate).getTime() - new Date(stay.checkInDate).getTime()) / (1000 * 60 * 60 * 24)));
+  doc.text('Nights:', rightCol, pY);
+  doc.text(String(nights), pValueX, pY);
+  doc.line(pValueX, pY + 1, rightCol + pLineLen, pY + 1);
+  pY += rowH;
+
+  doc.text('Room Rate:', rightCol, pY);
+  doc.text('$' + stay.rateAmount + ' / night', pValueX, pY);
+  doc.line(pValueX, pY + 1, rightCol + pLineLen, pY + 1);
+  pY += rowH;
+
+  doc.text('Room Total:', rightCol, pY);
+  doc.text('$' + (stay.rateAmount * nights).toFixed(2), pValueX, pY);
+  doc.line(pValueX, pY + 1, rightCol + pLineLen, pY + 1);
+  pY += rowH;
+
+  if (settings.vatEnabled) {
+    doc.text('VAT (10.75%):', rightCol, pY);
+    doc.text('$' + ((stay.rateAmount * nights) * 0.1075).toFixed(2), pValueX, pY);
+    doc.line(pValueX, pY + 1, rightCol + pLineLen, pY + 1);
+    pY += rowH;
   }
 
-  // ── Top Section: ID Image (left) + Payment Box (right) ──
-  const leftColW = contentWidth * 0.48;
-  const rightColW = contentWidth * 0.48;
-  const rightColX = margin + contentWidth * 0.52;
-  const boxHeight = 40;
+  if (settings.weeklyDiscountEnabled && nights >= 7) {
+    doc.text('Weekly Discount:', rightCol, pY);
+    doc.text('-$200.00', pValueX, pY);
+    doc.line(pValueX, pY + 1, rightCol + pLineLen, pY + 1);
+    pY += rowH;
+  }
 
-  // Left: ID Image
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.4);
-  doc.rect(margin, y, leftColW, boxHeight);
+  pY += 2;
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL DUE:', rightCol, pY);
+  doc.text('$' + stay.rateAmount.toFixed(2), pValueX, pY);
+  pY += 2;
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.3);
+  doc.line(rightCol, pY, rightCol + pLineLen, pY);
+  pY += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Amount Paid:', rightCol, pY);
+  doc.text('$' + stay.rateAmount.toFixed(2), pValueX, pY);
+  pY += 4;
+  doc.text('Payment Method: Cash', rightCol, pY);
 
-  if (idImageBase64) {
-    try {
-      // Calculate aspect ratio to fit inside the box
-      const img = new Image();
-      img.src = idImageBase64;
-      // Add image centered in box with padding
-      const padding = 2;
-      doc.addImage(idImageBase64, idImageType, margin + padding, y + padding, leftColW - padding * 2, boxHeight - padding * 2);
-    } catch {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(120, 120, 120);
-      doc.text('ID IMAGE', margin + leftColW / 2, y + boxHeight / 2, { align: 'center' });
-    }
-  } else {
+  y += 2;
+
+  // ── Vehicle Information ──
+  const vehicleY = y;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Vehicle Information', leftCol, vehicleY);
+  doc.setDrawColor(156, 163, 175);
+  doc.setLineWidth(0.1);
+  doc.line(leftCol, vehicleY + 1.5, leftCol + halfWidth - 5, vehicleY + 1.5);
+  y = vehicleY + 7;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+
+  doc.text('License Plate #:', leftCol, y);
+  doc.line(leftCol + 28, y + 1, leftCol + halfWidth - 5, y + 1);
+  y += 6;
+
+  doc.text('Vehicle Make:', leftCol, y);
+  doc.line(leftCol + 28, y + 1, leftCol + halfWidth - 5, y + 1);
+  y += 6;
+
+  doc.text('Vehicle Color:', leftCol, y);
+  doc.line(leftCol + 28, y + 1, leftCol + halfWidth - 5, y + 1);
+  y += 10;
+
+  // ── Dates ──
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Check-In / Check-Out', leftCol, y);
+  doc.setDrawColor(156, 163, 175);
+  doc.setLineWidth(0.1);
+  doc.line(leftCol, y + 1.5, leftCol + halfWidth - 5, y + 1.5);
+  y += 7;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+
+  const dateLineLen = 28;
+  doc.text('Check-In Date:', leftCol, y);
+  doc.text(stay.checkInDate, leftCol + 24, y);
+  doc.line(leftCol + 24, y + 1, leftCol + 24 + dateLineLen, y + 1);
+  doc.text('Time:', leftCol + 60, y);
+  doc.text(stay.checkInTime, leftCol + 68, y);
+  doc.line(leftCol + 68, y + 1, leftCol + 68 + dateLineLen, y + 1);
+  y += 6;
+
+  doc.text('Check-Out Date:', leftCol, y);
+  doc.text(stay.checkOutDate, leftCol + 24, y);
+  doc.line(leftCol + 24, y + 1, leftCol + 24 + dateLineLen, y + 1);
+  doc.text('Time:', leftCol + 60, y);
+  doc.text(stay.checkOutTime, leftCol + 68, y);
+  doc.line(leftCol + 68, y + 1, leftCol + 68 + dateLineLen, y + 1);
+  y += 10;
+
+  // ── Agreement ──
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Acknowledgement & Signature', leftCol, y);
+  doc.setDrawColor(156, 163, 175);
+  doc.setLineWidth(0.1);
+  doc.line(leftCol, y + 1.5, pageWidth - margin, y + 1.5);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('I have read, understand, and agree to all terms listed above.', leftCol, y + 2);
+  y += 10;
+
+  // ── Signatures ──
+  const sigLineWidth = 55;
+  const sigGap = 10;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+
+  doc.text('Guest Signature', leftCol, y);
+  doc.line(leftCol, y + 16, leftCol + sigLineWidth, y + 16);
+
+  doc.text('Date', leftCol + sigLineWidth + sigGap, y);
+  doc.line(leftCol + sigLineWidth + sigGap, y + 16, leftCol + sigLineWidth + sigGap + 38, y + 16);
+
+  doc.text('Phone', leftCol + sigLineWidth + sigGap + 38 + sigGap, y);
+  doc.line(leftCol + sigLineWidth + sigGap + 38 + sigGap, y + 16, pageWidth - margin, y + 16);
+
+  // ── ID Image ──
+  if (idBase64) {
+    y += 24;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text('ID IMAGE', margin + leftColW / 2, y + boxHeight / 2, { align: 'center' });
-  }
+    doc.setTextColor(0, 0, 0);
+    doc.text('ID Verification', leftCol, y);
+    y += 3;
 
-  // Right: Payment Box
-  doc.setLineWidth(0.4);
-  doc.rect(rightColX, y, rightColW, boxHeight);
-
-  let innerY = y + 7;
-  const lineSpacing = 7.5;
-  const labelX = rightColX + 3;
-  const valueX = rightColX + rightColW - 3;
-
-  // Room number
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(0, 0, 0);
-  doc.text('ROOM #', labelX, innerY);
-  doc.text(room.roomNumber || '___', valueX, innerY, { align: 'right' });
-  innerY += lineSpacing;
-
-  // Rate
-  doc.text('DAILY/WEEKLY RATE $', labelX, innerY);
-  doc.text(String(stay.rateAmount || '___'), valueX, innerY, { align: 'right' });
-  innerY += lineSpacing;
-
-  // Cash/Credit checkboxes
-  doc.setFontSize(8);
-  const checkY = innerY;
-  doc.text('CASH', labelX, checkY);
-  doc.rect(labelX + 12, checkY - 3, 3.5, 3.5);
-  if (hasCash) {
-    doc.setFont('helvetica', 'bold');
-    doc.text('X', labelX + 13, checkY - 0.2);
-  }
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text('CREDIT', labelX + 22, checkY);
-  doc.rect(labelX + 36, checkY - 3, 3.5, 3.5);
-  if (hasCard) {
-    doc.text('X', labelX + 37, checkY - 0.2);
-  }
-  innerY += lineSpacing;
-
-  // Total
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.text('TOTAL AMOUNT PAID $', labelX, innerY);
-  doc.text(String(totalAmount || '___'), valueX, innerY, { align: 'right' });
-
-  y += boxHeight + 6;
-
-  // ── Dates Row ──
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(0, 0, 0);
-
-  const dateFieldW = 28;
-  const timeFieldW = 18;
-  let dx = margin;
-
-  doc.text('CHECK-IN DATE', dx, y);
-  dx += 24;
-  doc.rect(dx, y - 3.5, dateFieldW, 5);
-  doc.setFont('helvetica', 'normal');
-  doc.text(stay.checkInDate || '', dx + 1, y);
-  dx += dateFieldW + 3;
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('CHECK-IN TIME', dx, y);
-  dx += 22;
-  doc.rect(dx, y - 3.5, timeFieldW, 5);
-  doc.setFont('helvetica', 'normal');
-  doc.text(stay.checkInTime || '', dx + 1, y);
-  dx += timeFieldW + 3;
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('CHECK-OUT DATE', dx, y);
-  dx += 24;
-  doc.rect(dx, y - 3.5, dateFieldW, 5);
-  doc.setFont('helvetica', 'normal');
-  doc.text(stay.checkOutDate || '', dx + 1, y);
-  dx += dateFieldW + 3;
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('CHECK-OUT TIME', dx, y);
-  dx += 22;
-  doc.rect(dx, y - 3.5, timeFieldW, 5);
-  doc.setFont('helvetica', 'normal');
-  doc.text('10 AM', dx + 1, y);
-
-  y += 10;
-
-  // ── Vehicle Row ──
-  dx = margin;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-
-  const vehicleFields = [
-    { label: 'MAKE', w: 28 },
-    { label: 'MODEL', w: 28 },
-    { label: 'LICENSE #', w: 28 },
-    { label: 'COLOR', w: 22 },
-    { label: 'YEAR', w: 18 },
-  ];
-
-  doc.text('VEHICLE INFO:', dx, y);
-  dx += 22;
-
-  vehicleFields.forEach((field) => {
-    doc.text(field.label, dx, y);
-    dx += field.label.length * 2 + 2;
-    doc.rect(dx, y - 3.5, field.w, 5);
-    dx += field.w + 3;
-  });
-
-  y += 10;
-
-  // ── Agreement Header ──
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(0, 0, 0);
-  const agreementText = 'By signing below, as a guest of AIRWAY MOTEL you state that you have fully read the statements conditions below and agree to abide by them, without exception, while staying at AIRWAY MOTEL.';
-  const agreementLines = doc.splitTextToSize(agreementText, contentWidth);
-  doc.text(agreementLines, margin, y);
-  y += agreementLines.length * 3.5 + 3;
-
-  // ── Terms ──
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  TERMS.forEach((term, i) => {
-    const termLines = doc.splitTextToSize(`${i + 1}. ${term}`, contentWidth - 6);
-    doc.text(termLines, margin + 4, y);
-    y += termLines.length * 2.8 + 1;
-  });
-
-  y += 5;
-
-  // ── Signature Line 1 ──
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(0, 0, 0);
-
-  const sigLineStart = margin;
-  const sigLineEnd = margin + 60;
-  const dateLineStart = margin + 65;
-  const dateLineEnd = margin + 95;
-  const phoneLineStart = margin + 100;
-  const phoneLineEnd = pageWidth - margin;
-
-  doc.text('GUEST SIGNATURE', sigLineStart, y);
-  doc.setLineWidth(0.3);
-  doc.line(sigLineStart + 28, y, sigLineEnd, y);
-
-  doc.text('DATE', dateLineStart, y);
-  doc.line(dateLineStart + 10, y, dateLineEnd, y);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.text(stay.checkInDate || '', dateLineStart + 11, y - 1);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text('PHONE #', phoneLineStart, y);
-  doc.line(phoneLineStart + 15, y, phoneLineEnd, y);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.text(guest.phone || '', phoneLineStart + 16, y - 1);
-
-  // Draw signature image
-  if (signatureUrl) {
+    const imgW = 38;
+    const imgH = 24;
+    doc.setDrawColor(200, 200, 200);
+    doc.rect(leftCol, y, imgW, imgH);
     try {
-      doc.addImage(signatureUrl, 'PNG', sigLineStart + 28, y - 7, 50, 7);
+      doc.addImage(idBase64, 'JPEG', leftCol, y, imgW, imgH);
     } catch {
-      // Image failed to load
+      doc.setFontSize(7);
+      doc.setTextColor(128, 128, 128);
+      doc.text('ID IMAGE', leftCol + 2, y + 12);
     }
   }
-
-  y += 14;
-
-  // ── Signature Line 2 (blank) ──
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-
-  doc.text('GUEST SIGNATURE', sigLineStart, y);
-  doc.line(sigLineStart + 28, y, sigLineEnd, y);
-
-  doc.text('DATE', dateLineStart, y);
-  doc.line(dateLineStart + 10, y, dateLineEnd, y);
-
-  doc.text('PHONE #', phoneLineStart, y);
-  doc.line(phoneLineStart + 15, y, phoneLineEnd, y);
 
   return doc;
 }
 
-export default function PrintRegistrationPage() {
+export default function PrintPage() {
   const params = useParams();
-  const searchParams = useSearchParams();
   const stayId = params.stayId as string;
-  const isDownload = searchParams.get('download') === 'true';
 
-  const stays = useMotelStore((s) => s.stays);
-  const guests = useMotelStore((s) => s.guests);
-  const rooms = useMotelStore((s) => s.rooms);
-  const payments = useMotelStore((s) => s.payments);
-
-  const [data, setData] = useState<PrintData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [ready, setReady] = useState(false);
   const [generating, setGenerating] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function load() {
-      if (!stayId) return;
+    const generate = async () => {
+      setGenerating(true);
+      setError(null);
+
+      // Wait for store data to load from Supabase
+      const waitForData = () => new Promise<void>((resolve) => {
+        const check = () => {
+          const { stays, guests, rooms, dataLoaded } = useMotelStore.getState();
+          if (dataLoaded && stays.some(s => s.id === stayId) && guests.some(g => g.id === stays.find(s => s.id === stayId)?.guestId)) {
+            resolve();
+          } else {
+            setTimeout(check, 100);
+          }
+        };
+        check();
+      });
+
       try {
-        // Try Supabase first with joined query
-        if (supabase) {
-          const { data: stayRow } = await supabase
-            .from('stays')
-            .select('*, guests(*), rooms(*), signatures(*), payments(*)')
-            .eq('id', stayId)
-            .single();
+        await waitForData();
+        const doc = await generateRegistrationPdf(stayId);
+        const blob = doc.output('blob');
+        const url = URL.createObjectURL(blob);
+        setPdfUrl(url);
 
-          if (stayRow) {
-            const g = stayRow.guests as Record<string, unknown>;
-            const r = stayRow.rooms as Record<string, unknown>;
-
-            const guest: Guest = {
-              id: g.id as string,
-              firstName: (g.first_name as string) || '',
-              lastName: (g.last_name as string) || '',
-              phone: (g.phone as string) || '',
-              email: (g.email as string) || '',
-              idNumber: (g.id_number as string) || '',
-              dateOfBirth: g.date_of_birth ? String(g.date_of_birth) : '',
-              idPhotoUrl: (g.id_photo_url as string) || '',
-              idType: (g.id_type as string) || '',
-              idState: (g.id_state as string) || '',
-              createdAt: g.created_at as string,
-            };
-
-            const room: Room = {
-              id: r.id as string,
-              roomNumber: (r.room_number as string) || '',
-              type: (r.type as Room['type']) || '1-bed',
-              rate: r.type === '2-bed' ? 85 : 65,
-              status: (r.status as Room['status']) || 'available',
-            };
-
-            const rawSigs = (stayRow.signatures || []) as Record<string, unknown>[];
-            const signatures: SignatureRecord[] = rawSigs.map((s) => ({
-              id: s.id as string,
-              stay_id: s.stay_id as string,
-              guest_id: s.guest_id as string,
-              signature_data_url: (s.signature_data_url as string) || '',
-              signed_at: s.signed_at as string,
-            }));
-
-            const rawPmts = (stayRow.payments || []) as Record<string, unknown>[];
-            const pmts: Payment[] = rawPmts.map((p) => ({
-              id: p.id as string,
-              stayId: p.stay_id as string,
-              amount: p.amount as number,
-              method: (p.method as Payment['method']) || 'card',
-              description: (p.description as string) || '',
-              paidAt: p.paid_at as string,
-            }));
-
-            const stay: Stay = {
-              id: stayRow.id,
-              guestId: stayRow.guest_id,
-              roomId: stayRow.room_id,
-              checkInDate: stayRow.check_in_date,
-              checkInTime: stayRow.check_in_time,
-              checkOutDate: stayRow.check_out_date,
-              checkOutTime: stayRow.check_out_time,
-              rateAmount: stayRow.rate_amount,
-              status: stayRow.status,
-              createdAt: stayRow.created_at,
-            };
-
-            setData({ stay, guest, room, payments: pmts, signatures });
-            return;
-          }
-        }
-
-        // Fallback to local store
-        const stay = stays.find((s) => s.id === stayId);
-        if (stay) {
-          const guest = guests.find((g) => g.id === stay.guestId);
-          const room = rooms.find((r) => r.id === stay.roomId);
-          const stayPayments = payments.filter((p) => p.stayId === stayId);
-          if (guest && room) {
-            setData({ stay, guest, room, payments: stayPayments, signatures: [] });
-          }
-        }
+        const stay = useMotelStore.getState().stays.find(s => s.id === stayId);
+        const guest = useMotelStore.getState().guests.find(g => g.id === stay?.guestId);
+        setFileName(`registration_${guest?.lastName || 'guest'}_${stay?.checkInDate || ''}`);
+        setReady(true);
       } catch (err) {
         console.error(err);
-        setError('Failed to load data');
+        setError(err instanceof Error ? err.message : 'Failed to generate PDF');
+      } finally {
+        setGenerating(false);
       }
-    }
-    load();
-  }, [stayId, stays, guests, rooms, payments]);
+    };
 
-  // Generate PDF or trigger print
-  useEffect(() => {
-    if (data) {
-      const timer = setTimeout(async () => {
-        try {
-          if (isDownload) {
-            const doc = await generateRegistrationPdf(data);
-            const fileName = `registration_${data.guest.lastName || 'guest'}_${data.room.roomNumber || 'room'}.pdf`;
-            doc.save(fileName);
-            setGenerating(false);
-            setTimeout(() => window.close(), 2000);
-          } else {
-            setGenerating(false);
-            setTimeout(() => window.print(), 300);
-          }
-        } catch (err) {
-          console.error('PDF generation error:', err);
-          setError('Failed to generate PDF');
-          setGenerating(false);
-        }
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [data, isDownload]);
+    generate();
+  }, [stayId]);
 
-  if (error) {
+  const handleDownload = () => {
+    if (!pdfUrl || !fileName) return;
+    const a = document.createElement('a');
+    a.href = pdfUrl;
+    a.download = `${fileName}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  if (generating || !ready) {
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        fontFamily: 'sans-serif',
-        background: '#fafafa',
-      }}>
-        <p style={{ color: '#dc2626', fontWeight: 500 }}>{error}</p>
-        <button
-          onClick={() => window.close()}
-          style={{
-            marginTop: '16px',
-            padding: '8px 16px',
-            background: '#18181b',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
-        >
-          Close
-        </button>
-      </div>
-    );
-  }
-
-  if (generating) {
-    return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        fontFamily: 'sans-serif',
-        background: '#fafafa',
-      }}>
-        <div style={{
-          width: '32px',
-          height: '32px',
-          border: '3px solid #e5e5e5',
-          borderTopColor: '#18181b',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-        <p style={{ marginTop: '16px', color: '#71717a', fontSize: '14px' }}>
-          {isDownload ? 'Generating PDF...' : 'Loading form...'}
-        </p>
-        <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
-      </div>
-    );
-  }
-
-  // Print mode: show the form as HTML for the print dialog
-  if (!isDownload && data) {
-    const { stay, guest, room, payments: stayPayments, signatures } = data;
-    const signatureUrl = signatures.length > 0 ? signatures[0].signature_data_url : null;
-    const totalAmount = stayPayments.reduce((acc, p) => acc + p.amount, 0);
-
-    return (
-      <div className="bg-white text-black min-h-screen font-sans p-8 print:p-0">
-        <style dangerouslySetInnerHTML={{ __html: `
-          @media print {
-            body, html { background: white !important; margin: 0; padding: 0; }
-            @page { margin: 0.5in; }
-          }
-          .form-field {
-            border-bottom: 1px solid black;
-            display: inline-block;
-            min-width: 40px;
-            text-align: center;
-            font-family: monospace;
-            padding: 0 4px;
-          }
-        `}} />
-
-        <div className="max-w-[8in] mx-auto text-[13px] leading-relaxed bg-white">
-          <div className="flex justify-between items-start mb-6 gap-8">
-            <div className="w-[45%]">
-              {guest.idPhotoUrl ? (
-                <img src={guest.idPhotoUrl} alt="ID Card" className="w-full h-auto border-2 border-black rounded shadow-sm max-h-48 object-cover" />
-              ) : (
-                <div className="w-full h-40 border-2 border-black border-dashed flex items-center justify-center text-gray-500 font-bold uppercase">
-                  ID Image Placeholder
-                </div>
-              )}
-            </div>
-            <div className="w-[50%] border-2 border-black p-4 space-y-4">
-              <div className="flex items-end justify-between">
-                <span className="font-bold">ROOM #</span>
-                <span className="form-field w-32 text-xl font-bold">{room.roomNumber}</span>
-              </div>
-              <div className="flex items-end justify-between">
-                <span className="font-bold">DAILY/WEEKLY RATE $</span>
-                <span className="form-field w-32">{stay.rateAmount}</span>
-              </div>
-              <div className="flex items-center justify-end gap-6 pt-1">
-                <label className="flex items-center gap-1 font-bold">
-                  CASH
-                  <div className="w-4 h-4 border border-black ml-1 flex items-center justify-center">
-                    {stayPayments.some(p => p.method === 'cash') && '✔'}
-                  </div>
-                </label>
-                <label className="flex items-center gap-1 font-bold">
-                  CREDIT
-                  <div className="w-4 h-4 border border-black ml-1 flex items-center justify-center">
-                    {stayPayments.some(p => p.method !== 'cash') && '✔'}
-                  </div>
-                </label>
-              </div>
-              <div className="flex items-end justify-between pt-1">
-                <span className="font-bold">TOTAL AMOUNT PAID $</span>
-                <span className="form-field w-32">{totalAmount}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-end gap-2 mb-4 font-bold text-sm">
-            <span>CHECK-IN DATE</span>
-            <span className="form-field flex-1 text-center">{stay.checkInDate}</span>
-            <span>CHECK-IN TIME</span>
-            <span className="form-field flex-1 text-center">{stay.checkInTime}</span>
-            <span>CHECK-OUT DATE</span>
-            <span className="form-field flex-1 text-center">{stay.checkOutDate}</span>
-            <span>CHECK-OUT TIME</span>
-            <span className="form-field flex-1 text-center">10 AM</span>
-          </div>
-
-          <div className="flex flex-wrap items-end gap-2 mb-6 font-bold text-sm">
-            <span>VEHICLE INFORMATION:</span>
-            <span>MAKE</span>
-            <span className="form-field flex-1"></span>
-            <span>MODEL</span>
-            <span className="form-field flex-1"></span>
-            <span>LICENSE #</span>
-            <span className="form-field flex-1"></span>
-            <span>COLOR</span>
-            <span className="form-field flex-1"></span>
-            <span>YEAR</span>
-            <span className="form-field flex-1"></span>
-          </div>
-
-          <p className="font-bold mb-4 text-justify">
-            By signing below, as a guest of AIRWAY MOTEL you state that you have fully read the statements conditions below and agree to abide by them, without exception, while staying at AIRWAY MOTEL.
-          </p>
-
-          <ol className="list-decimal pl-6 space-y-2 mb-8 text-[12px]">
-            {TERMS.map((term, i) => (
-              <li key={i}>{term}</li>
-            ))}
-          </ol>
-
-          <div className="space-y-8">
-            <div className="flex items-end gap-2 relative">
-              <span className="font-bold">GUEST SIGNATURE</span>
-              <span className="form-field flex-[2] relative h-6">
-                {signatureUrl && (
-                  <img src={signatureUrl} alt="Signature" className="absolute bottom-0 left-1/2 -translate-x-1/2 h-16 object-contain pointer-events-none mix-blend-multiply" />
-                )}
-              </span>
-              <span className="font-bold">DATE</span>
-              <span className="form-field flex-1">{stay.checkInDate}</span>
-              <span className="font-bold">PHONE #</span>
-              <span className="form-field flex-1">{guest.phone}</span>
-            </div>
-            <div className="flex items-end gap-2">
-              <span className="font-bold">GUEST SIGNATURE</span>
-              <span className="form-field flex-[2]"></span>
-              <span className="font-bold">DATE</span>
-              <span className="form-field flex-1"></span>
-              <span className="font-bold">PHONE #</span>
-              <span className="form-field flex-1"></span>
-            </div>
-          </div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-muted-foreground animate-spin mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">Generating registration form...</p>
         </div>
       </div>
     );
   }
 
-  // Download mode: show success
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-sm text-destructive">{error}</p>
+          <button onClick={() => window.close()} className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm">
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      fontFamily: 'sans-serif',
-      background: '#fafafa',
-    }}>
-      <div style={{
-        background: 'white',
-        padding: '32px',
-        borderRadius: '8px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        textAlign: 'center',
-      }}>
-        <div style={{ fontSize: '32px', marginBottom: '12px' }}>&#10003;</div>
-        <p style={{ fontWeight: 600, color: '#18181b', marginBottom: '4px' }}>PDF Downloaded!</p>
-        <p style={{ color: '#71717a', fontSize: '13px' }}>Check your downloads folder.</p>
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Top bar with filename input and download button */}
+      <div className="bg-white border-b border-border px-4 py-3 flex items-center gap-3 flex-wrap">
+        <FileText className="w-5 h-5 text-muted-foreground" />
+        <span className="text-sm font-semibold text-foreground">Registration Form Preview</span>
+        <div className="flex-1" />
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={fileName}
+            onChange={(e) => setFileName(e.target.value)}
+            className="px-3 py-1.5 border border-input rounded-md text-sm w-[280px] outline-none focus:ring-2 focus:ring-ring"
+          />
+          <span className="text-sm text-muted-foreground">.pdf</span>
+        </div>
+        <button
+          onClick={handleDownload}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          Download PDF
+        </button>
         <button
           onClick={() => window.close()}
-          style={{
-            marginTop: '16px',
-            padding: '8px 20px',
-            background: '#18181b',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
+          className="px-4 py-2 bg-transparent text-muted-foreground border border-input rounded-lg text-sm hover:bg-accent transition-colors"
         >
-          Close Tab
+          Close
         </button>
+      </div>
+
+      {/* PDF Preview */}
+      <div className="flex-1 p-5 flex justify-center">
+        {pdfUrl && (
+          <iframe
+            src={pdfUrl}
+            className="w-full max-w-[900px] border-none rounded-lg shadow-md"
+            style={{ height: 'calc(100vh - 80px)' }}
+          />
+        )}
       </div>
     </div>
   );
