@@ -180,69 +180,80 @@ async function generateRegistrationPdf(stayId: string) {
 
   // ── Dates Row ──
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(8);
   doc.setTextColor(0, 0, 0);
 
-  const dateFieldW = 28;
-  const timeFieldW = 18;
-  let dx = margin;
+  const halfContent = contentWidth / 2;
+  const dateBoxH = 14;
 
-  doc.text('CHECK-IN DATE', dx, y);
-  dx += 24;
-  doc.rect(dx, y - 3.5, dateFieldW, 5);
-  doc.setFont('helvetica', 'normal');
-  doc.text(stay.checkInDate || '', dx + 1, y);
-  dx += dateFieldW + 3;
-
+  // Check-In Box (left half)
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.3);
+  doc.rect(margin, y, halfContent - 3, dateBoxH);
   doc.setFont('helvetica', 'bold');
-  doc.text('CHECK-IN TIME', dx, y);
-  dx += 22;
-  doc.rect(dx, y - 3.5, timeFieldW, 5);
+  doc.setFontSize(7);
+  doc.text('CHECK-IN DATE', margin + 3, y + 5);
   doc.setFont('helvetica', 'normal');
-  doc.text(stay.checkInTime || '', dx + 1, y);
-  dx += timeFieldW + 3;
-
+  doc.setFontSize(9);
+  doc.text(stay.checkInDate || '', margin + 3, y + 11);
   doc.setFont('helvetica', 'bold');
-  doc.text('CHECK-OUT DATE', dx, y);
-  dx += 24;
-  doc.rect(dx, y - 3.5, dateFieldW, 5);
+  doc.setFontSize(7);
+  doc.text('TIME', margin + halfContent * 0.55, y + 5);
   doc.setFont('helvetica', 'normal');
-  doc.text(stay.checkOutDate || '', dx + 1, y);
-  dx += dateFieldW + 3;
+  doc.setFontSize(9);
+  doc.text(stay.checkInTime || '', margin + halfContent * 0.55, y + 11);
 
+  // Check-Out Box (right half)
+  doc.setDrawColor(0, 0, 0);
+  doc.rect(margin + halfContent + 3, y, halfContent - 3, dateBoxH);
   doc.setFont('helvetica', 'bold');
-  doc.text('CHECK-OUT TIME', dx, y);
-  dx += 22;
-  doc.rect(dx, y - 3.5, timeFieldW, 5);
+  doc.setFontSize(7);
+  doc.text('CHECK-OUT DATE', margin + halfContent + 6, y + 5);
   doc.setFont('helvetica', 'normal');
-  doc.text('10 AM', dx + 1, y);
+  doc.setFontSize(9);
+  doc.text(stay.checkOutDate || '', margin + halfContent + 6, y + 11);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.text('TIME', margin + halfContent + halfContent * 0.55, y + 5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text('10 AM', margin + halfContent + halfContent * 0.55, y + 11);
 
-  y += 10;
+  y += dateBoxH + 5;
 
   // ── Vehicle Row ──
-  dx = margin;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.3);
+  doc.rect(margin, y, contentWidth, 14);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
+  doc.text('VEHICLE INFORMATION', margin + 3, y + 5);
 
-  const vehicleFields = [
-    { label: 'MAKE', w: 28 },
-    { label: 'MODEL', w: 28 },
-    { label: 'LICENSE #', w: 28 },
-    { label: 'COLOR', w: 22 },
-    { label: 'YEAR', w: 18 },
+  const vehicleStartX = margin + 3;
+  const vehicleY = y + 11;
+  const vehicleFieldGap = 4;
+  const vehicleLabelOffset = 2;
+
+  const vehicleItems = [
+    { label: 'MAKE', value: '_____________' },
+    { label: 'MODEL', value: '_____________' },
+    { label: 'LICENSE #', value: '_____________' },
+    { label: 'COLOR', value: '_________' },
+    { label: 'YEAR', value: '_______' },
   ];
 
-  doc.text('VEHICLE INFO:', dx, y);
-  dx += 22;
-
-  vehicleFields.forEach((field) => {
-    doc.text(field.label, dx, y);
-    dx += field.label.length * 2 + 2;
-    doc.rect(dx, y - 3.5, field.w, 5);
-    dx += field.w + 3;
+  let vx = vehicleStartX;
+  vehicleItems.forEach((item) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.text(item.label, vx, vehicleY - vehicleLabelOffset);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(item.value, vx, vehicleY + 1.5);
+    vx += item.label.length * 1.8 + item.value.length * 1.8 + vehicleFieldGap;
   });
 
-  y += 10;
+  y += 19;
 
   // ── Agreement Header ──
   doc.setFont('helvetica', 'bold');
