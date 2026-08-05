@@ -129,8 +129,6 @@ const MOCK_ACTIVITY: ActivityLog[] = [
   { id: 'log-5', guest: 'Mike Turner', action: 'Check-out', room: '104', time: '9:45 AM', status: 'Success' },
 ];
 
-const MOTEL_SETTINGS_KEY = 'airway_motel_settings';
-
 const DEFAULT_SETTINGS: MotelSettings = {
   oneBedRate: 80,
   twoBedRate: 100,
@@ -140,16 +138,15 @@ const DEFAULT_SETTINGS: MotelSettings = {
   weeklyDiscountAmount: 200,
 };
 
-function loadSettings(): MotelSettings {
-  try {
-    const raw = localStorage.getItem(MOTEL_SETTINGS_KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
-  } catch { /* ignore */ }
-  return DEFAULT_SETTINGS;
-}
-
-function saveSettings(s: MotelSettings): void {
-  try { localStorage.setItem(MOTEL_SETTINGS_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+function mapSettingsFromDb(row: Record<string, unknown>): MotelSettings {
+  return {
+    oneBedRate: Number(row.one_bed_rate) ?? 80,
+    twoBedRate: Number(row.two_bed_rate) ?? 100,
+    vatEnabled: Boolean(row.vat_enabled),
+    vatRate: Number(row.vat_rate) ?? 10.75,
+    weeklyDiscountEnabled: Boolean(row.weekly_discount_enabled),
+    weeklyDiscountAmount: Number(row.weekly_discount_amount) ?? 200,
+  };
 }
 
 // ── API Fetch Helpers ────────────────────────────────────────────
@@ -255,7 +252,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
   activeTab: 'dashboard',
   isLoading: false,
   isUsingSupabase: false,
-  motelSettings: loadSettings(),
+  motelSettings: DEFAULT_SETTINGS,
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -265,11 +262,12 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
 
     set({ isLoading: true });
 
-    const [roomsData, guestsData, staysData, paymentsData] = await Promise.all([
+    const [roomsData, guestsData, staysData, paymentsData, settingsData] = await Promise.all([
       fetchFromApi<Record<string, unknown>>('/api/rooms'),
       fetchFromApi<Record<string, unknown>>('/api/guests'),
       fetchFromApi<Record<string, unknown>>('/api/stays'),
       fetchFromApi<Record<string, unknown>>('/api/payments'),
+      fetchFromApi<Record<string, unknown>>('/api/motel-settings'),
     ]);
 
     set({
@@ -277,6 +275,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
       guests: guestsData ? guestsData.map(mapGuestFromDb) : MOCK_GUESTS,
       stays: staysData ? (staysData as Record<string, unknown>[]).map(mapStayFromDb) : MOCK_STAYS,
       payments: paymentsData ? paymentsData.map(mapPaymentFromDb) : MOCK_PAYMENTS,
+      motelSettings: settingsData ? mapSettingsFromDb(settingsData[0] as Record<string, unknown>) : DEFAULT_SETTINGS,
       isUsingSupabase: !!(roomsData || guestsData || staysData || paymentsData),
       isLoading: false,
     });
@@ -530,11 +529,35 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
   },
 
   // Motel settings
-  updateMotelSettings: (newSettings) => {
-    set((state) => {
-      const updated = { ...state.motelSettings, ...newSettings };
-      saveSettings(updated);
-      return { motelSettings: updated };
-    });
+  updateMotelSettings: async (newSettings) => {
+    const state = get();
+    const updated = { ...state.motelSettings, ...newSettings };
+
+    if (isSupabaseConnected) {
+      const existing = await fetchFromApi<Record<string, unknown>[]>('/api/motel-settings');
+      if (existing && existing.length > 0) {
+        await patchApi('/api/motel-settings', {
+          id: existing[0].id,
+          one_bed_rate: updated.oneBedRate,
+          two_bed_rate: updated.twoBedRate,
+          vat_enabled: updated.vatEnabled,
+          vat_rate: updated.vatRate,
+          weekly_discount_enabled: updated.weeklyDiscountEnabled,
+          weekly_discount_amount: updated.weeklyDiscountAmount,
+        });
+      } else {
+        await postToApi<{ id: string }>('/api/motel-settings', {
+          id: 'main',
+          one_bed_rate: updated.oneBedRate,
+          two_bed_rate: updated.twoBedRate,
+          vat_enabled: updated.vatEnabled,
+          vat_rate: updated.vatRate,
+          weekly_discount_enabled: updated.weeklyDiscountEnabled,
+          weekly_discount_amount: updated.weeklyDiscountAmount,
+        });
+      }
+    }
+
+    set({ motelSettings: updated });
   },
 }));
