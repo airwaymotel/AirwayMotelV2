@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 // import { parseAAMVA, partialScannedIdFromRaw } from '@/lib/parse-aamva'; // BARCODE: uncomment when re-enabling barcode scanning
 import type { ScannedIdData } from '@/lib/parse-aamva';
 
@@ -196,221 +197,6 @@ interface PhoneReceived {
 // ══════════════════════════════════════════════════════════════════════════════
 // END BARCODE SCANNER
 // ══════════════════════════════════════════════════════════════════════════════
-
-// ── Mobile ID Camera ───────────────────────────────────────────────
-// Opens device camera with a frame guide for ID positioning.
-// Captures and crops the image to the frame region.
-
-function MobileIdCamera({
-  onCapture,
-  onBack,
-}: {
-  onCapture: (dataUrl: string) => void;
-  onBack: () => void;
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [camStatus, setCamStatus] = useState<'starting' | 'ready' | 'denied' | 'error'>('starting');
-
-  const stopStream = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-  }, []);
-
-  const startCamera = useCallback(async () => {
-    stopStream();
-    setCamStatus('starting');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setCamStatus('ready');
-      }
-    } catch (err) {
-      const name = (err as Error)?.name;
-      if (name === 'NotAllowedError' || name === 'SecurityError') {
-        setCamStatus('denied');
-      } else {
-        setCamStatus('error');
-      }
-    }
-  }, [stopStream]);
-
-  useEffect(() => {
-    startCamera();
-    return () => stopStream();
-  }, [startCamera, stopStream]);
-
-  const capture = useCallback(() => {
-    const video = videoRef.current;
-    const frame = frameRef.current;
-    if (!video || !video.videoWidth || !frame) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const videoRect = video.getBoundingClientRect();
-    const frameRect = frame.getBoundingClientRect();
-
-    const intrinsicWidth = video.videoWidth;
-    const intrinsicHeight = video.videoHeight;
-
-    const scale = Math.max(videoRect.width / intrinsicWidth, videoRect.height / intrinsicHeight);
-    const renderedWidth = intrinsicWidth * scale;
-    const renderedHeight = intrinsicHeight * scale;
-    const offsetX = (videoRect.width - renderedWidth) / 2;
-    const offsetY = (videoRect.height - renderedHeight) / 2;
-
-    const frameX = frameRect.left - videoRect.left;
-    const frameY = frameRect.top - videoRect.top;
-
-    const sx = (frameX - offsetX) / scale;
-    const sy = (frameY - offsetY) / scale;
-    const sw = frameRect.width / scale;
-    const sh = frameRect.height / scale;
-
-    canvas.width = sw;
-    canvas.height = sh;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-    stopStream();
-    onCapture(dataUrl);
-  }, [stopStream, onCapture]);
-
-  const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      stopStream();
-      onCapture(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col">
-      {/* Header */}
-      <div className="bg-black/80 p-4 flex items-center gap-3 z-20 shrink-0">
-        <button
-          onClick={() => { stopStream(); onBack(); }}
-          className="text-white/80 hover:text-white transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <p className="text-white font-semibold text-sm">Scan ID Card</p>
-          <p className="text-white/60 text-xs">Align the front of your ID within the frame</p>
-        </div>
-      </div>
-
-      {/* Camera view */}
-      <div className="flex-1 relative overflow-hidden">
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          playsInline
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        <canvas ref={canvasRef} className="hidden" />
-
-        {/* Frame overlay */}
-        {camStatus === 'ready' && (
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center px-6">
-            <div ref={frameRef} className="w-full max-w-sm aspect-[1.586/1] relative">
-              <div className="absolute inset-0 rounded-xl border-2 border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
-              <span className="absolute -top-7 left-0 text-[10px] font-bold tracking-widest text-white/80 uppercase">
-                Align ID within frame
-              </span>
-            </div>
-          </div>
-        )}
-
-        {camStatus === 'starting' && (
-          <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-            <div className="text-center text-white">
-              <Loader2 className="w-10 h-10 animate-spin mx-auto mb-3" />
-              <p className="font-semibold">Starting camera...</p>
-              <p className="text-white/60 text-sm mt-1">Allow camera access when prompted</p>
-            </div>
-          </div>
-        )}
-
-        {camStatus === 'denied' && (
-          <div className="absolute inset-0 bg-black/80 flex items-center justify-center px-6">
-            <div className="text-center text-white">
-              <Camera className="w-10 h-10 mx-auto mb-3 text-white/60" />
-              <p className="font-semibold text-lg mb-1">Camera blocked</p>
-              <p className="text-white/60 text-sm mb-4">Enable camera access in your browser settings</p>
-              <button
-                onClick={startCamera}
-                className="px-5 py-2.5 bg-white text-black rounded-lg font-bold"
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        )}
-
-        {camStatus === 'error' && (
-          <div className="absolute inset-0 bg-black/80 flex items-center justify-center px-6">
-            <div className="text-center text-white">
-              <Camera className="w-10 h-10 mx-auto mb-3 text-white/60" />
-              <p className="font-semibold text-lg mb-1">Camera not available</p>
-              <button
-                onClick={startCamera}
-                className="px-5 py-2.5 bg-white text-black rounded-lg font-bold mt-4"
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Capture button */}
-      {camStatus === 'ready' && (
-        <div className="bg-black/80 p-8 flex flex-col items-center gap-4 shrink-0 z-20">
-          <button
-            onClick={capture}
-            className="w-20 h-20 rounded-full border-4 border-white/40 flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
-          >
-            <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
-              <Camera className="w-7 h-7 text-black" />
-            </div>
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="text-white/60 text-xs flex items-center gap-1.5 hover:text-white/80 transition-colors cursor-pointer"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            Or upload from gallery
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleGalleryUpload}
-            className="hidden"
-          />
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Phone Scan Panel ───────────────────────────────────────────────
 // Shows a QR code linking to /scan/{id}?mode=photo
@@ -633,6 +419,94 @@ function VisionScanner({
   const [preview, setPreview] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  const redirectedRef = useRef(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const onScanSuccessRef = useRef(onScanSuccess);
+  const onSignatureReceivedRef = useRef(onSignatureReceived);
+  useEffect(() => {
+    onScanSuccessRef.current = onScanSuccess;
+    onSignatureReceivedRef.current = onSignatureReceived;
+  }, [onScanSuccess, onSignatureReceived]);
+
+  // On mobile: create a scan session, redirect to /scan page, and poll for result
+  useEffect(() => {
+    if (!isMobile || redirectedRef.current) return;
+    redirectedRef.current = true;
+
+    const createAndRedirect = async () => {
+      const id = crypto.randomUUID();
+      try {
+        const res = await fetch('/api/scan-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create', sessionId: id, mode: 'photo' }),
+        });
+        if (!res.ok) return;
+
+        // Redirect to the scan page
+        router.push(`/scan/${id}?mode=photo`);
+
+        // Start polling for the result
+        pollingRef.current = setInterval(async () => {
+          try {
+            const pollRes = await fetch(`/api/scan-session?sessionId=${id}`);
+            if (!pollRes.ok) return;
+            const data = await pollRes.json();
+
+            if (data.status === 'received') {
+              if (pollingRef.current) {
+                clearInterval(pollingRef.current);
+                pollingRef.current = null;
+              }
+              // Mark consumed
+              fetch(`/api/scan-session?sessionId=${id}`, { method: 'DELETE' }).catch(() => {});
+
+              if (data.signatureDataUrl) {
+                onSignatureReceivedRef.current?.(data.signatureDataUrl, !!data.termsAccepted);
+              }
+              const imageUrl = data.imageStorageUrl || data.imageBase64;
+              if (imageUrl) {
+                // Process with AI — same as PhoneScanPanel
+                setStatus('processing');
+                setPreview(imageUrl);
+                try {
+                  const scanRes = await fetch('/api/scan-id', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageBase64: imageUrl }),
+                  });
+                  if (!scanRes.ok) throw new Error('Failed to process ID');
+                  const { data: extracted } = await scanRes.json();
+                  if (extracted) {
+                    onScanSuccessRef.current(extracted, imageUrl);
+                    setStatus('idle');
+                  }
+                } catch {
+                  setStatus('error');
+                  setErrorMsg('Failed to process ID image from phone.');
+                }
+              }
+            }
+          } catch {
+            // Polling error — ignore
+          }
+        }, 2000);
+      } catch {
+        // Redirect failed — stay on choose mode
+        setSubMode('choose');
+      }
+    };
+    createAndRedirect();
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [isMobile, router]);
 
   const processImage = useCallback(async (dataUrl: string) => {
     setStatus('processing');
@@ -699,11 +573,21 @@ function VisionScanner({
     setStatus('idle');
     setPreview(null);
     setErrorMsg('');
-    setSubMode(isMobile ? 'camera' : 'choose');
+    if (isMobile) {
+      // Re-trigger redirect
+      redirectedRef.current = false;
+      setSubMode('camera');
+    } else {
+      setSubMode('choose');
+    }
   };
 
   const handleBackToChoose = () => {
-    setSubMode(isMobile ? 'camera' : 'choose');
+    if (isMobile) {
+      setSubMode('camera');
+    } else {
+      setSubMode('choose');
+    }
     setStatus('idle');
     setPreview(null);
     setErrorMsg('');
@@ -781,13 +665,18 @@ function VisionScanner({
     );
   }
 
-  // ── Mobile Camera mode (direct camera access with frame guide) ──
+  // ── Mobile Camera mode — redirecting to scan page ──
   if (subMode === 'camera' && status === 'idle') {
     return (
-      <MobileIdCamera
-        onCapture={(dataUrl) => processImage(dataUrl)}
-        onBack={handleBackToChoose}
-      />
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+          <Loader2 className="w-5 h-5 text-amber-600 animate-spin shrink-0" />
+          <div>
+            <p className="text-sm font-medium">Opening camera...</p>
+            <p className="text-xs text-muted-foreground">Redirecting to scan page</p>
+          </div>
+        </div>
+      </div>
     );
   }
 
