@@ -38,6 +38,11 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     router.push('/');
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('airway_auth');
+    router.push('/login');
+  };
+
   return (
     <aside
       className={cn(
@@ -119,6 +124,21 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           );
         })}
       </nav>
+
+      {/* Footer - Logout at bottom */}
+      <div className={cn('px-5 py-4 border-t border-border', collapsed && 'px-2')}>
+        <button
+          onClick={handleLogout}
+          className={cn(
+            'flex items-center gap-3 w-full text-sm text-red-500 hover:bg-red-500/10 rounded-md transition-colors',
+            collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2'
+          )}
+          title={collapsed ? 'Logout' : undefined}
+        >
+          <LogOut className="w-4 h-4 shrink-0" />
+          {!collapsed && <span>Logout</span>}
+        </button>
+      </div>
     </aside>
   );
 }
