@@ -134,7 +134,7 @@ export default function Home() {
 
   return (
     <AuthGuard>
-      <div className="h-screen flex flex-col bg-background overflow-hidden">
+      <div className="h-screen flex flex-col bg-background">
         <div className="flex flex-1">
           {/* Sidebar */}
           <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />

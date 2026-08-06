@@ -64,7 +64,7 @@ export default function StayLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <AuthGuard>
-      <div className="h-screen flex flex-col bg-background overflow-hidden">
+      <div className="h-screen flex flex-col bg-background">
         <div className="flex flex-1">
           <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
