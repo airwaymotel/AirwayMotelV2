@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
@@ -7,6 +8,8 @@ import {
   Bed,
   LogOut,
   Users,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import type { NavTab } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -26,6 +29,7 @@ const navItems: { icon: typeof LayoutDashboard; label: string; tab: NavTab }[] =
 
 export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const router = useRouter();
+  const [collapsed, setCollapsed] = useState(false);
 
   const handleNav = (tab: NavTab) => {
     onTabChange(tab);
@@ -38,9 +42,32 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   };
 
   return (
-    <aside className="hidden md:flex md:w-56 lg:w-64 flex-col bg-card border-r border-border h-full">
+    <aside
+      className={cn(
+        'hidden md:flex flex-col bg-card border-r border-border h-full transition-all duration-300 relative',
+        collapsed ? 'w-[68px]' : 'w-56 lg:w-64'
+      )}
+    >
+      {/* Toggle button */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="absolute -right-3 top-7 z-10 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center hover:bg-muted transition-colors cursor-pointer shadow-sm"
+      >
+        {collapsed ? (
+          <ChevronRight className="w-3 h-3 text-muted-foreground" />
+        ) : (
+          <ChevronLeft className="w-3 h-3 text-muted-foreground" />
+        )}
+      </button>
+
       {/* Brand */}
-      <button onClick={() => { onTabChange('dashboard'); router.push('/'); }} className="px-5 pt-6 pb-5 border-b border-border flex items-center gap-3 cursor-pointer hover:bg-muted/50 transition-colors w-full text-left">
+      <button
+        onClick={() => { onTabChange('dashboard'); router.push('/'); }}
+        className={cn(
+          'px-5 pt-6 pb-5 border-b border-border flex items-center gap-3 cursor-pointer hover:bg-muted/50 transition-colors w-full text-left',
+          collapsed && 'justify-center px-2'
+        )}
+      >
         <div className="shrink-0">
           <svg width="36" height="36" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="40" height="40" rx="10" fill="#f59e0b" />
@@ -48,22 +75,26 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             <path d="M15 22H25" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        <div>
-          <h1 className="text-lg font-bold text-foreground leading-none flex items-center gap-1">
-            <span>Airway</span>
-            <span className="text-amber-500 dark:text-amber-400">Motel</span>
-          </h1>
-          <p className="text-[10px] text-muted-foreground mt-1.5 uppercase tracking-widest font-bold">
-            Admin
-          </p>
-        </div>
+        {!collapsed && (
+          <div>
+            <h1 className="text-lg font-bold text-foreground leading-none flex items-center gap-1">
+              <span>Airway</span>
+              <span className="text-amber-500 dark:text-amber-400">Motel</span>
+            </h1>
+            <p className="text-[10px] text-muted-foreground mt-1.5 uppercase tracking-widest font-bold">
+              Admin
+            </p>
+          </div>
+        )}
       </button>
 
       {/* Nav */}
       <nav className="flex-1 py-4 flex flex-col">
-        <p className="text-[10px] text-muted-foreground px-5 mb-2 uppercase tracking-widest font-semibold">
-          Ledger
-        </p>
+        {!collapsed && (
+          <p className="text-[10px] text-muted-foreground px-5 mb-2 uppercase tracking-widest font-semibold">
+            Ledger
+          </p>
+        )}
         {navItems.map((item) => {
           const isActive = activeTab === item.tab;
           return (
@@ -71,11 +102,13 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               key={item.tab}
               onClick={() => handleNav(item.tab)}
               className={cn(
-                'group relative flex items-center gap-3 px-5 py-2.5 transition-colors text-sm cursor-pointer',
+                'group relative flex items-center gap-3 transition-colors text-sm cursor-pointer',
+                collapsed ? 'justify-center px-2 py-3' : 'px-5 py-2.5',
                 isActive
                   ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 font-semibold'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               )}
+              title={collapsed ? item.label : undefined}
             >
               <span
                 className={cn(
@@ -83,21 +116,25 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                   isActive ? 'bg-amber-500 dark:bg-amber-400 opacity-100' : 'opacity-0'
                 )}
               />
-              <item.icon className="w-4 h-4" strokeWidth={1.5} />
-              <span>{item.label}</span>
+              <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+              {!collapsed && <span>{item.label}</span>}
             </button>
           );
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-5 py-4 border-t border-border">
-        <button 
+      {/* Footer - Logout at bottom */}
+      <div className={cn('px-5 py-4 border-t border-border', collapsed && 'px-2')}>
+        <button
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-md transition-colors"
+          className={cn(
+            'flex items-center gap-3 w-full text-sm text-red-500 hover:bg-red-500/10 rounded-md transition-colors',
+            collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2'
+          )}
+          title={collapsed ? 'Logout' : undefined}
         >
           <LogOut className="w-4 h-4 shrink-0" />
-          Logout
+          {!collapsed && <span>Logout</span>}
         </button>
       </div>
     </aside>
