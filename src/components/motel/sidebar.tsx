@@ -44,7 +44,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'hidden md:flex flex-col bg-card border-r border-border h-full transition-all duration-300 relative',
+        'hidden lg:flex flex-col bg-card border-r border-border h-full transition-all duration-300 relative',
         collapsed ? 'w-[68px]' : 'w-56 lg:w-64'
       )}
     >
@@ -156,7 +156,7 @@ export function MobileNav({ activeTab, onTabChange }: SidebarProps) {
   };
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 flex justify-around items-center h-14 safe-area-bottom">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 flex justify-around items-center h-14 safe-area-bottom">
       {navItems.map((item) => {
         const isActive = activeTab === item.tab;
         return (

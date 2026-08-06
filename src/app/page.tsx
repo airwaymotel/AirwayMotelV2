@@ -145,18 +145,18 @@ export default function Home() {
             <header className="h-14 bg-card border-b border-border flex justify-between items-center px-4 lg:px-6 shrink-0">
               <div className="flex items-center gap-4 flex-1 min-w-0">
                 {/* Mobile brand */}
-                <div className="md:hidden shrink-0">
+                <div className="lg:hidden shrink-0">
                   <span className="text-sm font-bold text-foreground">Airway</span>
                   <span className="text-sm font-bold text-amber-600 ml-1">Motel</span>
                 </div>
 
                 {/* Mobile page title */}
-                <Badge variant="outline" className="md:hidden text-xs shrink-0">
+                <Badge variant="outline" className="lg:hidden text-xs shrink-0">
                   {pageTitle[activeTab]}
                 </Badge>
 
                 {/* Search */}
-                <div className="hidden md:block relative w-full max-w-xs" ref={searchRef}>
+                <div className="hidden lg:block relative w-full max-w-xs" ref={searchRef}>
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" strokeWidth={1.5} />
                   <Input
                     type="text"
@@ -250,7 +250,7 @@ export default function Home() {
             </header>
 
             {/* Content */}
-            <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+            <main className="flex-1 overflow-y-auto pb-16 lg:pb-0">
               {!dataLoaded || isLoading ? (
                 <PageSkeleton />
               ) : (
