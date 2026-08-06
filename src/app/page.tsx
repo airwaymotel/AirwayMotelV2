@@ -11,6 +11,7 @@ import Rooms from '@/components/motel/rooms';
 import CheckIn from '@/components/motel/check-in';
 import Checkout from '@/components/motel/checkout';
 import Guests from '@/components/motel/guests';
+import Settings from '@/components/motel/settings';
 import AuthGuard from '@/components/auth-guard';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -119,6 +120,8 @@ export default function Home() {
         return <Checkout />;
       case 'guests':
         return <Guests />;
+      case 'settings':
+        return <Settings />;
       default:
         return <Dashboard />;
     }
@@ -130,6 +133,7 @@ export default function Home() {
     'check-in': 'New Check-In',
     'checkout': 'Checkout',
     'guests': 'Guest History',
+    'settings': 'Settings',
   };
 
   return (
