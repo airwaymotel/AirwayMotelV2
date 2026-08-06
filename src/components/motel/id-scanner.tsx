@@ -18,6 +18,12 @@ import type { ScannedIdData } from '@/lib/parse-aamva';
 // Re-export the shared type so existing importers (check-in.tsx) keep working.
 export type { ScannedIdData } from '@/lib/parse-aamva';
 
+// Detect if the user is on a mobile/tablet device
+function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 1024;
+}
+
 // BARCODE: Uncomment 'barcode' when re-enabling barcode scanning
 type ScanMode = 'choose' | 'vision';
 type ScanStatus = 'idle' | 'scanning' | 'processing' | 'success' | 'error';
@@ -406,11 +412,13 @@ function VisionScanner({
   onScanSuccess: (data: ScannedIdData, imageBase64: string) => void;
   onSignatureReceived?: (signatureDataUrl: string, termsAccepted: boolean) => void;
 }) {
-  const [subMode, setSubMode] = useState<'choose' | 'phone' | 'upload'>('choose');
+  const isMobile = isMobileDevice();
+  const [subMode, setSubMode] = useState<'choose' | 'phone' | 'upload' | 'camera'>(isMobile ? 'camera' : 'choose');
   const [status, setStatus] = useState<'idle' | 'processing' | 'error' | 'preview'>('idle');
   const [preview, setPreview] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const processImage = useCallback(async (dataUrl: string) => {
     setStatus('processing');
@@ -454,6 +462,16 @@ function VisionScanner({
     reader.readAsDataURL(file);
   };
 
+  const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      processImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handlePhoneReceived = useCallback(
     (payload: PhoneReceived) => {
       // Phone already sent a signature + terms — bubble it up to check-in.tsx.
@@ -477,11 +495,11 @@ function VisionScanner({
     setStatus('idle');
     setPreview(null);
     setErrorMsg('');
-    setSubMode('choose');
+    setSubMode(isMobile ? 'camera' : 'choose');
   };
 
   const handleBackToChoose = () => {
-    setSubMode('choose');
+    setSubMode(isMobile ? 'camera' : 'choose');
     setStatus('idle');
     setPreview(null);
     setErrorMsg('');
@@ -555,6 +573,76 @@ function VisionScanner({
           Back to options
         </button>
         <PhoneScanPanel onReceived={handlePhoneReceived} />
+      </div>
+    );
+  }
+
+  // ── Mobile Camera mode (direct camera access) ──
+  if (subMode === 'camera' && status === 'idle') {
+    return (
+      <div className="space-y-3">
+        {isMobile && (
+          <button
+            onClick={handleBackToChoose}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to options
+          </button>
+        )}
+        <div className="space-y-3">
+          <button
+            onClick={() => cameraInputRef.current?.click()}
+            className="w-full p-5 rounded-xl border-2 border-amber-500/40 bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-all cursor-pointer text-left"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
+                <Camera className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-base">Take Photo of ID</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Open your camera, take a photo of the front of the ID
+                </p>
+                <Badge variant="secondary" className="mt-2 text-[10px]">Tap to open camera</Badge>
+              </div>
+            </div>
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full p-4 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center shrink-0">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-sm">Upload from Gallery</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Select an existing photo of the ID from your device
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleCameraCapture}
+          className="hidden"
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+        <p className="text-xs text-muted-foreground text-center">
+          Take a clear photo of the <strong>front of the ID</strong>
+        </p>
       </div>
     );
   }
