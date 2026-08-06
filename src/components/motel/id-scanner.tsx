@@ -197,6 +197,221 @@ interface PhoneReceived {
 // END BARCODE SCANNER
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ── Mobile ID Camera ───────────────────────────────────────────────
+// Opens device camera with a frame guide for ID positioning.
+// Captures and crops the image to the frame region.
+
+function MobileIdCamera({
+  onCapture,
+  onBack,
+}: {
+  onCapture: (dataUrl: string) => void;
+  onBack: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [camStatus, setCamStatus] = useState<'starting' | 'ready' | 'denied' | 'error'>('starting');
+
+  const stopStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    stopStream();
+    setCamStatus('starting');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setCamStatus('ready');
+      }
+    } catch (err) {
+      const name = (err as Error)?.name;
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        setCamStatus('denied');
+      } else {
+        setCamStatus('error');
+      }
+    }
+  }, [stopStream]);
+
+  useEffect(() => {
+    startCamera();
+    return () => stopStream();
+  }, [startCamera, stopStream]);
+
+  const capture = useCallback(() => {
+    const video = videoRef.current;
+    const frame = frameRef.current;
+    if (!video || !video.videoWidth || !frame) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const videoRect = video.getBoundingClientRect();
+    const frameRect = frame.getBoundingClientRect();
+
+    const intrinsicWidth = video.videoWidth;
+    const intrinsicHeight = video.videoHeight;
+
+    const scale = Math.max(videoRect.width / intrinsicWidth, videoRect.height / intrinsicHeight);
+    const renderedWidth = intrinsicWidth * scale;
+    const renderedHeight = intrinsicHeight * scale;
+    const offsetX = (videoRect.width - renderedWidth) / 2;
+    const offsetY = (videoRect.height - renderedHeight) / 2;
+
+    const frameX = frameRect.left - videoRect.left;
+    const frameY = frameRect.top - videoRect.top;
+
+    const sx = (frameX - offsetX) / scale;
+    const sy = (frameY - offsetY) / scale;
+    const sw = frameRect.width / scale;
+    const sh = frameRect.height / scale;
+
+    canvas.width = sw;
+    canvas.height = sh;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    stopStream();
+    onCapture(dataUrl);
+  }, [stopStream, onCapture]);
+
+  const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      stopStream();
+      onCapture(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black z-50 flex flex-col">
+      {/* Header */}
+      <div className="bg-black/80 p-4 flex items-center gap-3 z-20 shrink-0">
+        <button
+          onClick={() => { stopStream(); onBack(); }}
+          className="text-white/80 hover:text-white transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <p className="text-white font-semibold text-sm">Scan ID Card</p>
+          <p className="text-white/60 text-xs">Align the front of your ID within the frame</p>
+        </div>
+      </div>
+
+      {/* Camera view */}
+      <div className="flex-1 relative overflow-hidden">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <canvas ref={canvasRef} className="hidden" />
+
+        {/* Frame overlay */}
+        {camStatus === 'ready' && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center px-6">
+            <div ref={frameRef} className="w-full max-w-sm aspect-[1.586/1] relative">
+              <div className="absolute inset-0 rounded-xl border-2 border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
+              <span className="absolute -top-7 left-0 text-[10px] font-bold tracking-widest text-white/80 uppercase">
+                Align ID within frame
+              </span>
+            </div>
+          </div>
+        )}
+
+        {camStatus === 'starting' && (
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+            <div className="text-center text-white">
+              <Loader2 className="w-10 h-10 animate-spin mx-auto mb-3" />
+              <p className="font-semibold">Starting camera...</p>
+              <p className="text-white/60 text-sm mt-1">Allow camera access when prompted</p>
+            </div>
+          </div>
+        )}
+
+        {camStatus === 'denied' && (
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center px-6">
+            <div className="text-center text-white">
+              <Camera className="w-10 h-10 mx-auto mb-3 text-white/60" />
+              <p className="font-semibold text-lg mb-1">Camera blocked</p>
+              <p className="text-white/60 text-sm mb-4">Enable camera access in your browser settings</p>
+              <button
+                onClick={startCamera}
+                className="px-5 py-2.5 bg-white text-black rounded-lg font-bold"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
+        {camStatus === 'error' && (
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center px-6">
+            <div className="text-center text-white">
+              <Camera className="w-10 h-10 mx-auto mb-3 text-white/60" />
+              <p className="font-semibold text-lg mb-1">Camera not available</p>
+              <button
+                onClick={startCamera}
+                className="px-5 py-2.5 bg-white text-black rounded-lg font-bold mt-4"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Capture button */}
+      {camStatus === 'ready' && (
+        <div className="bg-black/80 p-8 flex flex-col items-center gap-4 shrink-0 z-20">
+          <button
+            onClick={capture}
+            className="w-20 h-20 rounded-full border-4 border-white/40 flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
+          >
+            <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
+              <Camera className="w-7 h-7 text-black" />
+            </div>
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="text-white/60 text-xs flex items-center gap-1.5 hover:text-white/80 transition-colors cursor-pointer"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Or upload from gallery
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleGalleryUpload}
+            className="hidden"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Phone Scan Panel ───────────────────────────────────────────────
 // Shows a QR code linking to /scan/{id}?mode=photo
 // Desktop polls GET /api/scan-session until the phone submits, then fires onReceived.
@@ -418,7 +633,6 @@ function VisionScanner({
   const [preview, setPreview] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const processImage = useCallback(async (dataUrl: string) => {
     setStatus('processing');
@@ -453,16 +667,6 @@ function VisionScanner({
   }, [onScanSuccess]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      processImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -577,73 +781,13 @@ function VisionScanner({
     );
   }
 
-  // ── Mobile Camera mode (direct camera access) ──
+  // ── Mobile Camera mode (direct camera access with frame guide) ──
   if (subMode === 'camera' && status === 'idle') {
     return (
-      <div className="space-y-3">
-        {isMobile && (
-          <button
-            onClick={handleBackToChoose}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to options
-          </button>
-        )}
-        <div className="space-y-3">
-          <button
-            onClick={() => cameraInputRef.current?.click()}
-            className="w-full p-5 rounded-xl border-2 border-amber-500/40 bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-all cursor-pointer text-left"
-          >
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
-                <Camera className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold text-base">Take Photo of ID</p>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Open your camera, take a photo of the front of the ID
-                </p>
-                <Badge variant="secondary" className="mt-2 text-[10px]">Tap to open camera</Badge>
-              </div>
-            </div>
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full p-4 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer text-left"
-          >
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center shrink-0">
-                <Upload className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold text-sm">Upload from Gallery</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Select an existing photo of the ID from your device
-                </p>
-              </div>
-            </div>
-          </button>
-        </div>
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleCameraCapture}
-          className="hidden"
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-        <p className="text-xs text-muted-foreground text-center">
-          Take a clear photo of the <strong>front of the ID</strong>
-        </p>
-      </div>
+      <MobileIdCamera
+        onCapture={(dataUrl) => processImage(dataUrl)}
+        onBack={handleBackToChoose}
+      />
     );
   }
 
