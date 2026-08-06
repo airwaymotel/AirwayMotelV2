@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Sun, Moon, User, DoorOpen } from 'lucide-react';
+import { Search, Sun, Moon, User, DoorOpen, Settings as SettingsIcon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useRouter } from 'next/navigation';
 import { useMotelStore } from '@/lib/store';
@@ -241,6 +241,17 @@ export default function Home() {
                   title={isDark ? 'Switch to day desk' : 'Switch to night desk'}
                 >
                   {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </Button>
+
+                {/* Settings (mobile/tablet only) */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => { setActiveTab('settings'); router.push('/'); }}
+                  className="lg:hidden h-8 w-8 text-muted-foreground"
+                  title="Settings"
+                >
+                  <SettingsIcon className="w-4 h-4" />
                 </Button>
 
                 {/* Admin */}

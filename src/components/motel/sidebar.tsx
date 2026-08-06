@@ -152,9 +152,12 @@ export function MobileNav({ activeTab, onTabChange }: SidebarProps) {
     router.push('/');
   };
 
+  // Filter out Settings from bottom nav (it's in the header instead)
+  const mobileItems = navItems.filter((item) => item.tab !== 'settings');
+
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 flex justify-around items-center h-14 safe-area-bottom">
-      {navItems.map((item) => {
+      {mobileItems.map((item) => {
         const isActive = activeTab === item.tab;
         return (
           <button
