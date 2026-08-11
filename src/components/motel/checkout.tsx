@@ -17,6 +17,7 @@ export default function Checkout() {
   const checkoutStay = useMotelStore((s) => s.checkoutStay);
   const addPayment = useMotelStore((s) => s.addPayment);
   const addActivity = useMotelStore((s) => s.addActivity);
+  const setActiveTab = useMotelStore((s) => s.setActiveTab);
 
   const [selectedStayId, setSelectedStayId] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -81,6 +82,7 @@ export default function Checkout() {
   const closeModal = () => {
     setShowSuccess(false);
     setSelectedStayId('');
+    setActiveTab('dashboard');
   };
 
   return (
