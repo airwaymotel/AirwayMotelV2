@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, Printer, Users, Clock, Repeat, Search, Receipt, Trash2, Pencil, Loader2 } from 'lucide-react';
+import { Download, Printer, Users, Clock, Repeat, Search, Receipt, Trash2, Pencil, Loader2, Copy } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -136,6 +136,16 @@ export default function Guests() {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleCopyEmails = () => {
+    const emails = filteredData.map((r) => r.email).filter(Boolean);
+    if (emails.length === 0) {
+      toast.info('No emails to copy');
+      return;
+    }
+    navigator.clipboard.writeText(emails.join(', '));
+    toast.success(`Copied ${emails.length} email${emails.length === 1 ? '' : 's'}`);
   };
 
   const handleDeleteClick = (guestId: string, guestName: string) => {
@@ -332,7 +342,14 @@ export default function Guests() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="uppercase text-[10px]">User</TableHead>
-                  <TableHead className="uppercase text-[10px]">Contact</TableHead>
+                  <TableHead className="uppercase text-[10px]">
+                    <div className="flex items-center gap-1.5">
+                      Contact
+                      <button onClick={handleCopyEmails} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer" title="Copy all emails">
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </TableHead>
                   <TableHead className="uppercase text-[10px]">Room #</TableHead>
                   <TableHead className="uppercase text-[10px]">Stay Period</TableHead>
                   <TableHead className="uppercase text-[10px] text-center">Status</TableHead>
