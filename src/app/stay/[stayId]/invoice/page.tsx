@@ -111,6 +111,8 @@ export default function InvoicePage() {
   // Auto-print after data loads
   useEffect(() => {
     if (data) {
+      // Set empty title to prevent URL from showing in print header/footer
+      document.title = ' ';
       const timer = setTimeout(() => window.print(), 500);
       return () => clearTimeout(timer);
     }
@@ -159,6 +161,7 @@ export default function InvoicePage() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
+        @page { margin: 0; }
         @media print {
           body * { visibility: hidden; }
           #receipt, #receipt * { visibility: visible; }
