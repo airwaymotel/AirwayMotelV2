@@ -34,6 +34,7 @@ export default function Guests() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roomTypeFilter, setRoomTypeFilter] = useState('All Types');
+  const [statusFilter, setStatusFilter] = useState('All');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
 
@@ -99,15 +100,16 @@ export default function Guests() {
         guest.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         receiptId.includes(searchQuery.toUpperCase());
       const matchesRoom = roomTypeFilter === 'All Types' || guest.roomType === roomTypeFilter;
-      return matchesSearch && matchesRoom;
+      const matchesStatus = statusFilter === 'All' || guest.status === statusFilter;
+      return matchesSearch && matchesRoom && matchesStatus;
     });
-  }, [historyData, searchQuery, roomTypeFilter]);
+  }, [historyData, searchQuery, roomTypeFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
   const paginatedData = filteredData.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // Reset to page 1 when filters change
-  useMemo(() => { setPage(1); }, [searchQuery, roomTypeFilter]);
+  useMemo(() => { setPage(1); }, [searchQuery, roomTypeFilter, statusFilter]);
 
   // Stats
   const uniqueGuests = new Set(stays.map((s) => s.guestId)).size;
@@ -299,6 +301,19 @@ export default function Guests() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="md:col-span-3">
+              <label className="block text-[10px] text-muted-foreground uppercase font-semibold mb-1">Status</label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All</SelectItem>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="md:col-span-3 flex items-end">
               <Button
                 variant="secondary"
@@ -306,6 +321,7 @@ export default function Guests() {
                 onClick={() => {
                   setSearchQuery('');
                   setRoomTypeFilter('All Types');
+                  setStatusFilter('All');
                 }}
               >
                 Clear Filters
