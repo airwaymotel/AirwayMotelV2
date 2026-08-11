@@ -127,11 +127,8 @@ export default function Dashboard() {
         {/* Recent Activity */}
         <AnimateOnScroll delay={200} className="lg:col-span-8">
           <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
-            <button className="text-xs text-muted-foreground hover:text-foreground font-semibold uppercase cursor-pointer">
-              View All
-            </button>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
