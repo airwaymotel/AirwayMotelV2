@@ -410,8 +410,8 @@ export default function Guests() {
                             variant="outline"
                             size="sm"
                             className="h-7 px-2 text-[11px] font-medium text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700 dark:border-green-800 dark:hover:bg-green-950"
-                            title="Download Cash Receipt"
-                            onClick={() => window.open(`/stay/${row.stayId}/invoice?download=true`, '_blank')}
+                            title="Print Cash Receipt"
+                            onClick={() => window.open(`/stay/${row.stayId}/invoice`, '_blank')}
                           >
                             Receipt
                           </Button>

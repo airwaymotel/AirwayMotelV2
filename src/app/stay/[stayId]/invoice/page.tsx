@@ -304,14 +304,14 @@ export default function InvoicePage() {
     load();
   }, [stayId, stays, guests, rooms, payments]);
 
-  // Generate PDF and auto-download
+  // Generate PDF and open in new tab for printing
   useEffect(() => {
     if (data) {
       try {
         const doc = generateReceiptPdf(data);
-        const fileName = `${data.guest.firstName || ''} ${data.guest.lastName || ''}`.trim() || 'Guest';
-        doc.save(`${fileName}.Receipt.pdf`);
-        window.close();
+        const blob = doc.output('blob');
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
       } catch (err) {
         console.error('PDF generation error:', err);
         setError('Failed to generate PDF');
