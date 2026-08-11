@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   BedSingle, BedDouble, ArrowRight, ArrowLeft, CheckCircle,
-  CreditCard, Banknote, Wallet, PenLine, Upload,
+  CreditCard, Banknote, PenLine, Upload,
   Camera, Loader2, X, ImageIcon, ScanLine, DoorOpen, User,
   AlertCircle, RefreshCcw,
 } from 'lucide-react';
@@ -270,6 +270,10 @@ const STEPS = [
   const [showReturningSelector, setShowReturningSelector] = useState(false);
   const [selectedReturningGuestId, setSelectedReturningGuestId] = useState('');
 
+  // VAT & Discount toggles (admin selects per customer in payment step)
+  const [applyVat, setApplyVat] = useState(false);
+  const [applyWeeklyDiscount, setApplyWeeklyDiscount] = useState(false);
+
   // Phone signature flow
   const [showPhoneSignature, setShowPhoneSignature] = useState(false);
   const [phoneSigSessionId, setPhoneSigSessionId] = useState('');
@@ -294,8 +298,8 @@ const STEPS = [
     : 1;
 
   const subtotal = rate * nights;
-  const vatAmount = motelSettings.vatEnabled ? subtotal * (motelSettings.vatRate / 100) : 0;
-  const weeklyDiscount = motelSettings.weeklyDiscountEnabled && nights >= 7 ? motelSettings.weeklyDiscountAmount : 0;
+  const vatAmount = applyVat ? subtotal * (motelSettings.vatRate / 100) : 0;
+  const weeklyDiscount = applyWeeklyDiscount && nights >= 7 ? 200 : 0;
   const totalDue = subtotal + vatAmount - weeklyDiscount;
 
   // ── Manual file upload handler ──
@@ -548,6 +552,8 @@ const STEPS = [
     setIdScanned(false);
     setCompletedStayId('');
     setSubmitting(false);
+    setApplyVat(false);
+    setApplyWeeklyDiscount(false);
     // Reset returning customer state
     setIsReturningCustomer(false);
     setShowReturningSelector(false);
@@ -958,8 +964,7 @@ const STEPS = [
             <CardContent className="space-y-4">
               <div className="grid grid-cols-3 gap-3">
                 {([
-                  { value: 'card' as PaymentMethod, icon: CreditCard, label: 'Credit Card' },
-                  { value: 'debit' as PaymentMethod, icon: Wallet, label: 'Debit Card' },
+                  { value: 'card' as PaymentMethod, icon: CreditCard, label: 'Card' },
                   { value: 'cash' as PaymentMethod, icon: Banknote, label: 'Cash' },
                 ]).map(({ value, icon: Icon, label }) => (
                   <button
@@ -977,6 +982,45 @@ const STEPS = [
                 ))}
               </div>
 
+              {/* VAT & Weekly Discount — returning customers only */}
+              {isReturningCustomer && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Adjustments (Returning Customer)</p>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={applyVat}
+                        onChange={(e) => setApplyVat(e.target.checked)}
+                        className="w-4 h-4 rounded border-border accent-primary"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium">Apply VAT ({motelSettings.vatRate}%)</span>
+                        <span className="text-xs text-muted-foreground ml-2">${vatAmount.toFixed(2)}</span>
+                      </div>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={applyWeeklyDiscount}
+                        onChange={(e) => setApplyWeeklyDiscount(e.target.checked)}
+                        disabled={nights < 7}
+                        className="w-4 h-4 rounded border-border accent-primary"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium">Weekly Discount (7+ nights)</span>
+                        {nights < 7 ? (
+                          <span className="text-xs text-muted-foreground ml-2">Requires 7+ nights</span>
+                        ) : (
+                          <span className="text-xs text-green-600 dark:text-green-400 ml-2">-$200.00</span>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+                </>
+              )}
+
               <Separator />
 
                <div className="space-y-2">
@@ -988,21 +1032,17 @@ const STEPS = [
                    <span>Subtotal</span>
                    <span className="font-medium">${subtotal.toFixed(2)}</span>
                  </div>
-                 {motelSettings.vatEnabled && (
-                   <>
-                     <div className="flex justify-between text-sm">
-                       <span>VAT ({motelSettings.vatRate}%)</span>
-                       <span className="font-medium">${vatAmount.toFixed(2)}</span>
-                     </div>
-                   </>
+                 {vatAmount > 0 && (
+                   <div className="flex justify-between text-sm">
+                     <span>VAT ({motelSettings.vatRate}%)</span>
+                     <span className="font-medium">${vatAmount.toFixed(2)}</span>
+                   </div>
                  )}
                   {weeklyDiscount > 0 && (
-                    <>
-                      <div className="flex justify-between text-sm">
-                        <span>Weekly Discount</span>
-                        <span className="font-medium text-green-600 dark:text-green-400">-${weeklyDiscount.toFixed(2)}</span>
-                      </div>
-                    </>
+                    <div className="flex justify-between text-sm">
+                      <span>Weekly Discount</span>
+                      <span className="font-medium text-green-600 dark:text-green-400">-${weeklyDiscount.toFixed(2)}</span>
+                    </div>
                   )}
                   <Separator />
                   <div className="flex justify-between text-base font-semibold">

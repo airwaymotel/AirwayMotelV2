@@ -1,7 +1,7 @@
 export type RoomStatus = 'available' | 'occupied' | 'maintenance' | 'cleaning' | 'reserved';
 export type RoomType = '1-bed' | '2-bed';
 export type StayStatus = 'active' | 'checked_out' | 'cancelled';
-export type PaymentMethod = 'cash' | 'card' | 'debit';
+export type PaymentMethod = 'cash' | 'card';
 
 export interface Room {
   id: string;
