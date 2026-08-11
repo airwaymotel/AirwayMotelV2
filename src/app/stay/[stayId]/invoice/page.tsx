@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useMotelStore } from '@/lib/store';
 import type { Guest, Room, Stay, Payment } from '@/lib/types';
-import { jsPDF } from 'jspdf';
 import { Loader2 } from 'lucide-react';
 
 interface PrintData {
@@ -13,201 +12,6 @@ interface PrintData {
   guest: Guest;
   room: Room;
   payments: Payment[];
-}
-
-function generateReceiptPdf(data: PrintData): jsPDF {
-  const { stay, guest, room, payments } = data;
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-
-  const pageWidth = 210;
-  const margin = 20;
-  const contentWidth = pageWidth - margin * 2;
-  const centerX = pageWidth / 2;
-  let y = 25;
-
-  const asteriskLine = '***************************************';
-
-  const cashPayments = payments.filter(p => p.method === 'cash');
-  const totalCashPaid = cashPayments.reduce((sum, p) => sum + p.amount, 0);
-  const cardPayments = payments.filter(p => p.method === 'card');
-  const totalCardPaid = cardPayments.reduce((sum, p) => sum + p.amount, 0);
-  const totalPaid = totalCashPaid + totalCardPaid;
-
-  const start = new Date(stay.checkInDate);
-  const end = new Date(stay.checkOutDate);
-  const nights = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-  const roomTotal = stay.rateAmount * nights;
-
-  // ══════════════════════════════════════════
-  // HEADER
-  // ══════════════════════════════════════════
-  doc.setFont('courier', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(0, 0, 0);
-  doc.text('AIRWAY MOTEL', centerX, y, { align: 'center' });
-  y += 7;
-
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(60, 60, 60);
-  doc.text('8339 E Colfax Ave, Denver, CO 80220', centerX, y, { align: 'center' });
-  y += 5;
-  doc.text('Tel. (303) 420-8998', centerX, y, { align: 'center' });
-  y += 7;
-
-  // Asterisk divider
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text(asteriskLine, centerX, y, { align: 'center' });
-  y += 7;
-
-  // CASH RECEIPT heading
-  doc.setFont('courier', 'bold');
-  doc.setFontSize(16);
-  doc.text('CASH RECEIPT', centerX, y, { align: 'center' });
-  y += 7;
-
-  // Asterisk divider
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(10);
-  doc.text(asteriskLine, centerX, y, { align: 'center' });
-  y += 10;
-
-  // ══════════════════════════════════════════
-  // GUEST & STAY INFO
-  // ══════════════════════════════════════════
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(0, 0, 0);
-
-  doc.text(`Guest: ${guest.firstName || ''} ${guest.lastName || ''}`, margin, y);
-  y += 5;
-  doc.text(`Room: #${room.roomNumber || 'N/A'}`, margin, y);
-  y += 5;
-  doc.text(`Check-In:  ${stay.checkInDate || ''}  ${stay.checkInTime || ''}`, margin, y);
-  y += 5;
-  doc.text(`Check-Out: ${stay.checkOutDate || ''}  ${stay.checkOutTime || ''}`, margin, y);
-  y += 5;
-  doc.text(`Nights: ${nights}`, margin, y);
-  y += 8;
-
-  // ══════════════════════════════════════════
-  // LINE ITEMS
-  // ══════════════════════════════════════════
-  doc.setFont('courier', 'bold');
-  doc.setFontSize(10);
-  doc.text('Description', margin, y);
-  doc.text('Price', pageWidth - margin, y, { align: 'right' });
-  y += 3;
-
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(10);
-  doc.text('- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -', centerX, y, { align: 'center' });
-  y += 6;
-
-  // Room charge line item
-  doc.text(`Room (${nights} night${nights > 1 ? 's' : ''} x $${stay.rateAmount})`, margin, y);
-  doc.text(`$${roomTotal.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
-  y += 6;
-
-  doc.text('- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -', centerX, y, { align: 'center' });
-  y += 8;
-
-  // ══════════════════════════════════════════
-  // FINANCIAL SUMMARY
-  // ══════════════════════════════════════════
-  doc.setFont('courier', 'bold');
-  doc.setFontSize(13);
-  doc.text('TOTAL', margin, y);
-  doc.text(`$${roomTotal.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
-  y += 7;
-
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(10);
-
-  if (totalCashPaid > 0) {
-    doc.text('Cash', margin, y);
-    doc.text(`$${totalCashPaid.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
-    y += 5;
-  }
-
-  if (totalCardPaid > 0) {
-    doc.text('Card', margin, y);
-    doc.text(`$${totalCardPaid.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
-    y += 5;
-  }
-
-  const change = totalPaid - roomTotal;
-  if (change > 0) {
-    doc.setFont('courier', 'bold');
-    doc.text('Change', margin, y);
-    doc.text(`$${change.toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
-    y += 5;
-  }
-
-  y += 3;
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(10);
-  doc.text(asteriskLine, centerX, y, { align: 'center' });
-  y += 8;
-
-  // ══════════════════════════════════════════
-  // PAYMENT META DETAILS
-  // ══════════════════════════════════════════
-  if (totalCardPaid > 0) {
-    doc.setFont('courier', 'normal');
-    doc.setFontSize(9);
-    doc.text('Payment Method', margin, y);
-    doc.text('Card', pageWidth - margin, y, { align: 'right' });
-    y += 5;
-  }
-
-  if (totalCashPaid > 0) {
-    doc.setFont('courier', 'normal');
-    doc.setFontSize(9);
-    doc.text('Payment Method', margin, y);
-    doc.text('Cash', pageWidth - margin, y, { align: 'right' });
-    y += 5;
-  }
-
-  doc.text('Date', margin, y);
-  doc.text(stay.checkOutDate || '', pageWidth - margin, y, { align: 'right' });
-  y += 5;
-
-  doc.text('Time', margin, y);
-  doc.text(stay.checkOutTime || '', pageWidth - margin, y, { align: 'right' });
-  y += 5;
-
-  doc.text('Receipt #', margin, y);
-  doc.text(stay.id ? stay.id.slice(0, 8).toUpperCase() : 'N/A', pageWidth - margin, y, { align: 'right' });
-  y += 8;
-
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(10);
-  doc.text(asteriskLine, centerX, y, { align: 'center' });
-  y += 10;
-
-  // ══════════════════════════════════════════
-  // FOOTER
-  // ══════════════════════════════════════════
-  doc.setFont('courier', 'bold');
-  doc.setFontSize(12);
-  doc.text('THANK YOU!', centerX, y, { align: 'center' });
-  y += 7;
-
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text('Please retain this receipt for your records.', centerX, y, { align: 'center' });
-  y += 10;
-
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text(asteriskLine, centerX, y, { align: 'center' });
-
-  return doc;
 }
 
 export default function InvoicePage() {
@@ -304,35 +108,157 @@ export default function InvoicePage() {
     load();
   }, [stayId, stays, guests, rooms, payments]);
 
-  // Generate PDF and open in new tab for printing
+  // Auto-print after data loads
   useEffect(() => {
     if (data) {
-      try {
-        const doc = generateReceiptPdf(data);
-        const blob = doc.output('blob');
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-      } catch (err) {
-        console.error('PDF generation error:', err);
-        setError('Failed to generate PDF');
-      }
+      const timer = setTimeout(() => window.print(), 500);
+      return () => clearTimeout(timer);
     }
   }, [data]);
 
   if (error) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif', background: '#fafafa' }}>
-        <p style={{ color: '#dc2626', fontWeight: 500 }}>{error}</p>
-        <button onClick={() => window.close()} style={{ marginTop: '16px', padding: '8px 16px', background: '#18181b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>Close</button>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-sm text-destructive">{error}</p>
+          <button onClick={() => window.close()} className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm">
+            Close
+          </button>
+        </div>
       </div>
     );
   }
 
+  if (!data) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-muted-foreground animate-spin mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">Loading receipt...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { stay, guest, room, payments: stayPayments } = data;
+  const cashPayments = stayPayments.filter(p => p.method === 'cash');
+  const totalCashPaid = cashPayments.reduce((sum, p) => sum + p.amount, 0);
+  const cardPayments = stayPayments.filter(p => p.method === 'card');
+  const totalCardPaid = cardPayments.reduce((sum, p) => sum + p.amount, 0);
+  const totalPaid = totalCashPaid + totalCardPaid;
+
+  const start = new Date(stay.checkInDate);
+  const end = new Date(stay.checkOutDate);
+  const nights = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+  const roomTotal = stay.rateAmount * nights;
+  const change = totalPaid - roomTotal;
+  const receiptId = stay.id ? stay.id.slice(0, 8).toUpperCase() : 'N/A';
+  const asterisks = '***************************************';
+  const dashes = '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -';
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif', background: '#fafafa' }}>
-      <Loader2 style={{ width: '32px', height: '32px', animation: 'spin 0.8s linear infinite', color: '#a1a1aa' }} />
-      <p style={{ marginTop: '16px', color: '#71717a', fontSize: '14px' }}>Generating receipt...</p>
-      <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
-    </div>
+    <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body * { visibility: hidden; }
+          #receipt, #receipt * { visibility: visible; }
+          #receipt { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+      `}} />
+      <div id="receipt" className="min-h-screen bg-white flex items-center justify-center p-8">
+        <div style={{ width: '320px', fontFamily: 'Courier New, Courier, monospace', fontSize: '13px', color: '#000', lineHeight: '1.6' }}>
+          {/* Header */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '20px', fontWeight: 'bold' }}>AIRWAY MOTEL</div>
+            <div style={{ fontSize: '11px', color: '#555' }}>8339 E Colfax Ave, Denver, CO 80220</div>
+            <div style={{ fontSize: '11px', color: '#555' }}>Tel. (303) 420-8998</div>
+            <div style={{ margin: '8px 0' }}>{asterisks}</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold' }}>CASH RECEIPT</div>
+            <div style={{ margin: '8px 0' }}>{asterisks}</div>
+          </div>
+
+          {/* Guest & Stay Info */}
+          <div style={{ margin: '12px 0' }}>
+            <div>Guest: {guest.firstName} {guest.lastName}</div>
+            <div>Room: #{room.roomNumber || 'N/A'}</div>
+            <div>Check-In: {stay.checkInDate} {stay.checkInTime}</div>
+            <div>Check-Out: {stay.checkOutDate} {stay.checkOutTime}</div>
+            <div>Nights: {nights}</div>
+          </div>
+
+          {/* Line Items */}
+          <div style={{ fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
+            <span>Description</span>
+            <span>Price</span>
+          </div>
+          <div style={{ textAlign: 'center', margin: '4px 0' }}>{dashes}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Room ({nights} night{nights > 1 ? 's' : ''} x ${stay.rateAmount})</span>
+            <span>${roomTotal.toFixed(2)}</span>
+          </div>
+          <div style={{ textAlign: 'center', margin: '4px 0' }}>{dashes}</div>
+
+          {/* Financial Summary */}
+          <div style={{ margin: '12px 0' }}>
+            <div style={{ fontWeight: 'bold', fontSize: '15px', display: 'flex', justifyContent: 'space-between' }}>
+              <span>TOTAL</span>
+              <span>${roomTotal.toFixed(2)}</span>
+            </div>
+            {totalCashPaid > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Cash</span>
+                <span>${totalCashPaid.toFixed(2)}</span>
+              </div>
+            )}
+            {totalCardPaid > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Card</span>
+                <span>${totalCardPaid.toFixed(2)}</span>
+              </div>
+            )}
+            {change > 0 && (
+              <div style={{ fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Change</span>
+                <span>${change.toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+
+          <div style={{ textAlign: 'center', margin: '8px 0' }}>{asterisks}</div>
+
+          {/* Payment Meta */}
+          <div style={{ fontSize: '11px' }}>
+            {totalCardPaid > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Payment Method</span><span>Card</span>
+              </div>
+            )}
+            {totalCashPaid > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Payment Method</span><span>Cash</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Date</span><span>{stay.checkOutDate}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Time</span><span>{stay.checkOutTime}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Receipt #</span><span>{receiptId}</span>
+            </div>
+          </div>
+
+          <div style={{ textAlign: 'center', margin: '8px 0' }}>{asterisks}</div>
+
+          {/* Footer */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '14px', fontWeight: 'bold' }}>THANK YOU!</div>
+            <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>Please retain this receipt for your records.</div>
+            <div style={{ margin: '8px 0' }}>{asterisks}</div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
