@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, Printer, Users, Clock, Repeat, Search, Receipt, Trash2, Pencil, Loader2, Copy } from 'lucide-react';
+import { Download, Printer, Users, Clock, Repeat, Search, Receipt, Trash2, Pencil, Loader2, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,8 @@ export default function Guests() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roomTypeFilter, setRoomTypeFilter] = useState('All Types');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   // Delete dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -100,6 +102,12 @@ export default function Guests() {
       return matchesSearch && matchesRoom;
     });
   }, [historyData, searchQuery, roomTypeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
+  const paginatedData = filteredData.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Reset to page 1 when filters change
+  useMemo(() => { setPage(1); }, [searchQuery, roomTypeFilter]);
 
   // Stats
   const uniqueGuests = new Set(stays.map((s) => s.guestId)).size;
@@ -357,8 +365,8 @@ export default function Guests() {
                 </TableRow>
               </TableHeader>
             <TableBody>
-              {filteredData.length > 0 ? (
-                filteredData.map((row, idx) => (
+              {paginatedData.length > 0 ? (
+                paginatedData.map((row, idx) => (
                   <TableRow
                     key={idx}
                     className="cursor-pointer hover:bg-muted/50"
@@ -427,8 +435,33 @@ export default function Guests() {
         </div>
           <div className="p-3 bg-muted/30 border-t border-border flex items-center justify-between no-print">
             <p className="text-xs text-muted-foreground">
-              Showing {filteredData.length} record{filteredData.length === 1 ? '' : 's'}
+              Showing {paginatedData.length} of {filteredData.length} record{filteredData.length === 1 ? '' : 's'}
             </p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="h-7 px-2"
+                >
+                  <ChevronLeft className="w-3 h-3" />
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {page} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="h-7 px-2"
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </Button>
+              </div>
+            )}
           </div>
         </Card>
       </div>
