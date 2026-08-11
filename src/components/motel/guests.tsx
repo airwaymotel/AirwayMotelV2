@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, Printer, Users, Clock, Repeat, Search, Receipt, Trash2, Pencil, Loader2, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, Printer, Users, Clock, Repeat, Search, Receipt, Trash2, Loader2, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -398,27 +398,39 @@ export default function Guests() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right no-print" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit Guest" onClick={() => {
-                          const guest = guests.find((g) => g.id === row.guestId);
-                          if (guest) handleEditClick(guest);
-                        }}>
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete Guest" onClick={() => handleDeleteClick(row.guestId, row.name)}>
-                          <Trash2 className="w-4 h-4" />
+                      <div className="flex justify-end gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-[11px] font-medium text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:hover:bg-blue-950"
+                          title="Edit Guest"
+                          onClick={() => {
+                            const guest = guests.find((g) => g.id === row.guestId);
+                            if (guest) handleEditClick(guest);
+                          }}
+                        >
+                          Edit
                         </Button>
                         {row.hasCash && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-500/10" 
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-[11px] font-medium text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700 dark:border-green-800 dark:hover:bg-green-950"
                             title="Download Cash Receipt"
                             onClick={() => window.open(`/stay/${row.stayId}/invoice?download=true`, '_blank')}
                           >
-                            <Receipt className="w-4 h-4" />
+                            Receipt
                           </Button>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          title="Delete Guest"
+                          onClick={() => handleDeleteClick(row.guestId, row.name)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
