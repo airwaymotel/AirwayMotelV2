@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useMotelStore } from '@/lib/store';
 import { toast } from 'sonner';
 
@@ -237,17 +236,6 @@ export default function Checkout() {
                   <div className="flex justify-between items-center pt-3 border-t border-primary-foreground/20">
                     <span className="text-base font-semibold">Total Amount</span>
                     <span className="text-2xl font-bold">${totalAmount.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-3 mb-6">
-                  <div className="flex items-center gap-2">
-                    <Checkbox defaultChecked className="border-primary-foreground/30" />
-                    <span className="text-xs opacity-80">Generate Digital Receipt (PDF)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Checkbox className="border-primary-foreground/30" />
-                    <span className="text-xs opacity-80">Send copy to guest email</span>
                   </div>
                 </div>
 
