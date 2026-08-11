@@ -93,10 +93,10 @@ export default function Guests() {
   // Stats
   const uniqueGuests = new Set(stays.map((s) => s.guestId)).size;
   const avgStay = historyData.length > 0
-    ? (historyData.reduce((sum, h) => {
+    ? Math.round(historyData.reduce((sum, h) => {
         const nights = parseInt(h.details) || 1;
         return sum + nights;
-      }, 0) / historyData.length).toFixed(1)
+      }, 0) / historyData.length)
     : '0';
   const repeatRate = (() => {
     const guestCounts = new Map<string, number>();
