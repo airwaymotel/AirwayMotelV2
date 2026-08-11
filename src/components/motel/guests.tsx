@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, Printer, Users, Clock, Repeat, Search, Receipt, Trash2, Loader2, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Printer, Users, Clock, Repeat, Search, Receipt, Trash2, Loader2, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -124,24 +124,6 @@ export default function Guests() {
     return uniqueGuests > 0 ? ((repeatGuests / uniqueGuests) * 100).toFixed(1) : '0';
   })();
 
-  const handleExportCSV = () => {
-    const headers = ['Receipt ID', 'Guest Name', 'ID', 'Room', 'Stay Period', 'Details', 'Room Type', 'Status', 'Total Paid'];
-    const csvContent = [
-      headers.join(','),
-      ...filteredData.map(row => 
-        `"${row.stayId.substring(0, 8).toUpperCase()}","${row.name}","${row.id}","${row.room}","${row.dates}","${row.details}","${row.roomType}","${row.status}","${row.paid}"`
-      )
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `guest_history_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const handlePrint = () => {
     window.print();
   };
@@ -244,10 +226,6 @@ export default function Guests() {
           <p className="text-muted-foreground mt-1">Search and review past guest records.</p>
         </div>
         <div className="flex gap-2 no-print">
-          <Button variant="outline" size="sm" onClick={handleExportCSV}>
-            <Download className="w-4 h-4 mr-1" />
-            Export CSV
-          </Button>
           <Button variant="outline" size="sm" onClick={handlePrint}>
             <Printer className="w-4 h-4 mr-1" />
             Print Report
