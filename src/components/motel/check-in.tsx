@@ -5,7 +5,7 @@ import {
   BedSingle, BedDouble, ArrowRight, ArrowLeft, CheckCircle,
   CreditCard, Banknote, PenLine, Upload,
   Camera, Loader2, X, ImageIcon, ScanLine, DoorOpen, User,
-  AlertCircle, RefreshCcw,
+  AlertCircle, RefreshCcw, Search,
 } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
 import { QRCodeSVG } from 'qrcode.react';
@@ -269,6 +269,7 @@ const STEPS = [
   const [isReturningCustomer, setIsReturningCustomer] = useState(false);
   const [showReturningSelector, setShowReturningSelector] = useState(false);
   const [selectedReturningGuestId, setSelectedReturningGuestId] = useState('');
+  const [returningSearchQuery, setReturningSearchQuery] = useState('');
 
   // VAT & Discount toggles (admin selects per customer in payment step)
   const [applyVat, setApplyVat] = useState(false);
@@ -721,21 +722,61 @@ const STEPS = [
                   <CardTitle className="text-sm">Select Returning Guest</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name, phone, or ID..."
+                      value={returningSearchQuery}
+                      onChange={(e) => setReturningSearchQuery(e.target.value)}
+                      className="pl-8"
+                      autoFocus
+                    />
+                  </div>
                   {guests.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No previous guests found.</p>
                   ) : (
-                    <Select value={selectedReturningGuestId} onValueChange={handleReturningGuestSelect}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Search or select a guest..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {guests.map((g) => (
-                          <SelectItem key={g.id} value={g.id}>
-                            {g.firstName} {g.lastName} — {g.idNumber || g.phone || 'No ID'}
-                          </SelectItem>
+                    <div className="max-h-60 overflow-y-auto space-y-1">
+                      {guests
+                        .filter((g) => {
+                          if (!returningSearchQuery.trim()) return true;
+                          const q = returningSearchQuery.toLowerCase();
+                          return (
+                            `${g.firstName} ${g.lastName}`.toLowerCase().includes(q) ||
+                            g.phone.toLowerCase().includes(q) ||
+                            (g.idNumber && g.idNumber.toLowerCase().includes(q))
+                          );
+                        })
+                        .map((g) => (
+                          <button
+                            key={g.id}
+                            onClick={() => {
+                              handleReturningGuestSelect(g.id);
+                              setReturningSearchQuery('');
+                            }}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer ${
+                              selectedReturningGuestId === g.id
+                                ? 'bg-primary text-primary-foreground'
+                                : 'hover:bg-muted'
+                            }`}
+                          >
+                            <p className="font-medium">{g.firstName} {g.lastName}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {g.idNumber || 'No ID'}{g.phone ? ` · ${g.phone}` : ''}
+                            </p>
+                          </button>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      {guests.filter((g) => {
+                        if (!returningSearchQuery.trim()) return true;
+                        const q = returningSearchQuery.toLowerCase();
+                        return (
+                          `${g.firstName} ${g.lastName}`.toLowerCase().includes(q) ||
+                          g.phone.toLowerCase().includes(q) ||
+                          (g.idNumber && g.idNumber.toLowerCase().includes(q))
+                        );
+                      }).length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-2">No guests match your search.</p>
+                      )}
+                    </div>
                   )}
                   <Button
                     variant="ghost"
@@ -745,6 +786,7 @@ const STEPS = [
                       setIsReturningCustomer(false);
                       setShowReturningSelector(false);
                       setSelectedReturningGuestId('');
+                      setReturningSearchQuery('');
                     }}
                   >
                     Cancel — Use New Guest Flow
