@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, Printer, Users, Clock, Repeat, Search, User, Receipt, Trash2, Pencil, Loader2 } from 'lucide-react';
+import { Download, Printer, Users, Clock, Repeat, Search, Receipt, Trash2, Pencil, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,9 +46,18 @@ export default function Guests() {
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', phone: '', email: '', idNumber: '', dateOfBirth: '', idType: '', idState: '' });
   const [saving, setSaving] = useState(false);
 
-  // Build history data
+  // Build history data — deduplicated: only most recent stay per guest
   const historyData = useMemo(() => {
-    return stays.map((stay) => {
+    const guestMap = new Map<string, typeof stays[0]>();
+    const sortedStays = [...stays].sort((a, b) => b.checkInDate.localeCompare(a.checkInDate));
+    for (const stay of sortedStays) {
+      if (!guestMap.has(stay.guestId)) {
+        guestMap.set(stay.guestId, stay);
+      }
+    }
+    const dedupedStays = Array.from(guestMap.values());
+
+    return dedupedStays.map((stay) => {
       const guest = guests.find((g) => g.id === stay.guestId);
       const room = rooms.find((r) => r.id === stay.roomId);
       const stayPayments = payments.filter((p) => p.stayId === stay.id);
@@ -63,6 +72,7 @@ export default function Guests() {
         guestId: guest?.id || stay.guestId,
         name: guest ? `${guest.firstName} ${guest.lastName}` : 'Unknown',
         phone: guest?.phone || '',
+        email: guest?.email || '',
         room: room?.roomNumber || '---',
         dates: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
         details: `${nights} Night${nights > 1 ? 's' : ''} • ${room?.type === '1-bed' ? '1-Bed King' : room?.type === '2-bed' ? '2-Bed Queen' : 'Standard'}`,
@@ -74,7 +84,7 @@ export default function Guests() {
         stayId: stay.id,
         hasCash: stayPayments.some(p => p.method === 'cash'),
       };
-    }).sort((a, b) => b.checkInDate.localeCompare(a.checkInDate));
+    });
   }, [stays, guests, rooms, payments]);
 
   const filteredData = useMemo(() => {
@@ -84,6 +94,7 @@ export default function Guests() {
         guest.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         guest.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         guest.phone.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        guest.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         receiptId.includes(searchQuery.toUpperCase());
       const matchesRoom = roomTypeFilter === 'All Types' || guest.roomType === roomTypeFilter;
       return matchesSearch && matchesRoom;
@@ -320,34 +331,34 @@ export default function Guests() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="uppercase text-[10px]">Guest Name</TableHead>
-                  <TableHead className="uppercase text-[10px]">Receipt ID</TableHead>
-                  <TableHead className="uppercase text-[10px]">ID</TableHead>
-                  <TableHead className="uppercase text-[10px]">Phone</TableHead>
+                  <TableHead className="uppercase text-[10px]">User</TableHead>
+                  <TableHead className="uppercase text-[10px]">Contact</TableHead>
                   <TableHead className="uppercase text-[10px]">Room #</TableHead>
                   <TableHead className="uppercase text-[10px]">Stay Period</TableHead>
                   <TableHead className="uppercase text-[10px] text-center">Status</TableHead>
-                  <TableHead className="uppercase text-[10px] text-right">Total Paid</TableHead>
                   <TableHead className="uppercase text-[10px] text-right no-print">Actions</TableHead>
                 </TableRow>
               </TableHeader>
             <TableBody>
               {filteredData.length > 0 ? (
                 filteredData.map((row, idx) => (
-                  <TableRow key={idx}>
+                  <TableRow
+                    key={idx}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => router.push(`/guest/${row.guestId}`)}
+                  >
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">
-                          {row.name.split(' ').map((n) => n[0]).join('')}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">{row.name}</p>
-                        </div>
+                      <div>
+                        <p className="text-sm font-medium">{row.name}</p>
+                        <p className="text-[11px] text-muted-foreground font-mono">{row.id}</p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs font-mono text-muted-foreground">{row.stayId.substring(0, 8).toUpperCase()}</TableCell>
-                    <TableCell className="text-sm font-mono">{row.id}</TableCell>
-                    <TableCell className="text-sm">{row.phone || '—'}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="text-sm">{row.email || '—'}</p>
+                        <p className="text-[11px] text-muted-foreground">{row.phone || '—'}</p>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-sm font-medium">#{row.room}</TableCell>
                     <TableCell>
                       <p className="text-sm">{row.dates}</p>
@@ -361,12 +372,8 @@ export default function Guests() {
                         {row.status}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right text-sm font-medium">{row.paid}</TableCell>
-                    <TableCell className="text-right no-print">
+                    <TableCell className="text-right no-print" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="View Guest Details" onClick={() => router.push(`/guest/${row.guestId}`)}>
-                          <User className="w-4 h-4" />
-                        </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit Guest" onClick={() => {
                           const guest = guests.find((g) => g.id === row.guestId);
                           if (guest) handleEditClick(guest);
@@ -393,7 +400,7 @@ export default function Guests() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     No records found matching your filters.
                   </TableCell>
                 </TableRow>
