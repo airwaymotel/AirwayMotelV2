@@ -278,7 +278,7 @@ export default function Guests() {
       <Card className="no-print">
         <CardContent className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-            <div className="md:col-span-5 relative">
+            <div className="md:col-span-4 relative">
               <label className="block text-[10px] text-muted-foreground uppercase font-semibold mb-1">Guest Search</label>
               <Search className="absolute left-2.5 top-[26px] text-muted-foreground w-4 h-4" />
               <Input
@@ -288,7 +288,7 @@ export default function Guests() {
                 placeholder="Name, ID, Phone, or Receipt ID..."
               />
             </div>
-            <div className="md:col-span-4">
+            <div className="md:col-span-3">
               <label className="block text-[10px] text-muted-foreground uppercase font-semibold mb-1">Room Type</label>
               <Select value={roomTypeFilter} onValueChange={setRoomTypeFilter}>
                 <SelectTrigger>
@@ -314,7 +314,7 @@ export default function Guests() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="md:col-span-3 flex items-end">
+            <div className="md:col-span-2 flex items-end">
               <Button
                 variant="secondary"
                 className="w-full"
