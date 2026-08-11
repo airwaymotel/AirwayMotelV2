@@ -700,65 +700,6 @@ export default function Rooms() {
                 />
               </div>
             </div>
-
-            <Separator />
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-xs">VAT (10.75%)</Label>
-                <p className="text-[11px] text-muted-foreground">Apply VAT to room charges</p>
-              </div>
-              <Button
-                variant={settings.vatEnabled ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSettings({ ...settings, vatEnabled: !settings.vatEnabled })}
-              >
-                {settings.vatEnabled ? 'On' : 'Off'}
-              </Button>
-            </div>
-
-            {settings.vatEnabled && (
-              <div className="space-y-2 ml-4">
-                <Label className="text-xs">VAT Rate (%)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  value={settings.vatRate}
-                  onChange={(e) => setSettings({ ...settings, vatRate: Number(e.target.value) || 0 })}
-                />
-              </div>
-            )}
-
-            <Separator />
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-xs">Weekly Discount ($200)</Label>
-                <p className="text-[11px] text-muted-foreground">Apply discount for stays of 7+ nights</p>
-              </div>
-              <Button
-                variant={settings.weeklyDiscountEnabled ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSettings({ ...settings, weeklyDiscountEnabled: !settings.weeklyDiscountEnabled })}
-              >
-                {settings.weeklyDiscountEnabled ? 'On' : 'Off'}
-              </Button>
-            </div>
-
-            {settings.weeklyDiscountEnabled && (
-              <div className="space-y-2 ml-4">
-                <Label className="text-xs">Discount Amount ($)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={settings.weeklyDiscountAmount}
-                  onChange={(e) => setSettings({ ...settings, weeklyDiscountAmount: Number(e.target.value) || 0 })}
-                />
-              </div>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSettings(false)}>Cancel</Button>
