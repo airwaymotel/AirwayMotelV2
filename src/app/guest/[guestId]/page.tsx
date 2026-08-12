@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import {
   ArrowLeft, User, Phone, Mail, Calendar, BedSingle, BedDouble,
   Shield, CreditCard, Banknote, Wallet, ImageIcon, PenLine,
-  CheckCircle, Clock, AlertTriangle, Loader2,
+  CheckCircle, Clock, AlertTriangle, Loader2, FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -359,6 +359,7 @@ export default function GuestDetailsPage() {
                   <TableHead className="uppercase text-[10px]">Rate</TableHead>
                   <TableHead className="uppercase text-[10px] text-right">Total Paid</TableHead>
                   <TableHead className="uppercase text-[10px] text-center">Status</TableHead>
+                  <TableHead className="uppercase text-[10px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -395,6 +396,17 @@ export default function GuestDetailsPage() {
                         >
                           {stay.status === 'checked_out' ? 'Checked Out' : stay.status === 'active' ? 'Active' : 'Cancelled'}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-[11px] font-medium text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:hover:bg-blue-950"
+                          onClick={() => window.open(`/stay/${stay.id}/print`, '_blank')}
+                        >
+                          <FileText className="w-3 h-3 mr-1" />
+                          Registration
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
