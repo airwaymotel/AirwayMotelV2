@@ -1106,15 +1106,18 @@ const STEPS = [
               <div className="bg-muted/30 rounded-lg p-4 text-xs text-muted-foreground space-y-2 max-h-48 overflow-y-auto">
                 <p className="font-semibold text-foreground text-sm mb-2">Airway Motel — Terms and Conditions</p>
                 <p className="text-[11px]">8339 E Colfax Ave, Denver, CO 80220 | (303) 420-8998</p>
-                <p>By signing below, as a guest of AIRWAY MOTEL you state that you have fully read the statements below and agree to abide by them.</p>
+                <p>By signing below, as a guest of AIRWAY MOTEL, you state that you have fully read the statements and conditions below and agree to abide by them, without exception, while staying at AIRWAY MOTEL.</p>
                  <ol className="list-decimal list-inside space-y-1.5 mt-2">
-                   <li>Checkout time is 10 AM on date of checkout.</li>
-                   <li>A fee of $10 per hour will be assessed for each hour past checkout time.</li>
-                   <li>Guests may request refund of room rent within five (5) minutes of check-in if room unsatisfactory.</li>
-                   <li>No illicit drug activity, solicitation, illegal weapon possession, or dangerous activities tolerated.</li>
-                   <li>Management reserves the right to evict any guest at any time without refund for policy violations.</li>
-                   <li>Management reserves the right to enter any room at any time for inspection or repairs.</li>
-                   <li>Airway Motel assumes no responsibility for lost, stolen, or damaged personal items.</li>
+                   <li>Checkout time is 10 AM on the date of checkout.</li>
+                   <li>A fee of <strong>$10 dollars per hour</strong> will be assessed for each hour the guest stays past checkout time.</li>
+                   <li>Deposits for key and T.V. remote will not be returned unless each is returned in serviceable condition.</li>
+                   <li>Guests may request refund of room rent and deposits for key and T.V remote, within <strong>five (5) minutes</strong> of check-in time if room unsatisfactory. <em>NO refunds will be given outside this time for any reason.</em></li>
+                   <li>The following <strong>WILL NOT</strong> be tolerated during your stay at AIRWAY MOTEL, for any reason: Illicit drug activity, solicitation (prostitution), illegal weapon possession, or any activities that would pose a danger to guests, staff, general public or in violation of any state/county/city municipal code.</li>
+                   <li>Management reserves the right to <strong>EVICT</strong> any guest or visitors <strong>AT ANY TIME</strong>, without refund, for any damaging of property, harassment of other guests or staff, causing harm to others, refusal to pay rent fees, allowing/having unregistered visitors in room, participating in any illegal or suspicious activities or any other management policies/verbal directions. Any person(s) can be barred from entering AIRWAY MOTEL property at any time.</li>
+                   <li>Management reserves the right to enter any room at any time, for inspection, for repairs, for cleaning, pest control measures, or other actions to maintain room/facilities. Management/staff will knock before entering room.</li>
+                   <li>AIRWAY MOTEL, management/staff, does not/will not assume any responsibility for any; lost, stolen, or damage to personal items/valuables or vehicles. AIRWAY MOTEL, management/staff does not/will not assume any responsibility for any accident(s), personal injury or death(s) occurring on property and shall not be held liable for any of the for mentioned reason(s).</li>
+                   <li>Upon check-out, eviction, or nonpayment of room rental fee, AIRWAY MOTEL/management/staff will assume any and all properties including valuables left in room/on property were left intentionally and assumes the right to discard the a for mentioned items. Should guest/tenant leave by circumstances beyond their control, management, at their discretion, will pack and store guest/tenant belongings for a period of <strong>30 days</strong> at a fee of <strong>$200 dollars</strong>, paid at time of recovery of items. Note: Any items that are excessively large (furniture and appliances), non-servable, perishable, or unsafe will not be stored.</li>
+                   <li>Any tenant who commits, conducts, facilitates, allows, permits, or fails on Airway Motel property any public nuisance as defined in section 37-50 (c) or (d) of the Denver Revised Municipal Code, or any other activity prohibited by state law or the Denver Revised Municipal Code shall be subject to <strong>immediate eviction</strong>.</li>
                  </ol>
               </div>
 
