@@ -1094,44 +1094,42 @@ const STEPS = [
                 ))}
               </div>
 
-              {/* VAT & Weekly Discount — returning customers only */}
-              {isReturningCustomer && (
-                <>
-                  <Separator />
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Adjustments (Returning Customer)</p>
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={applyVat}
-                        onChange={(e) => setApplyVat(e.target.checked)}
-                        className="w-4 h-4 rounded border-border accent-primary"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm font-medium">Apply VAT ({motelSettings.vatRate}%)</span>
-                        <span className="text-xs text-muted-foreground ml-2">${vatAmount.toFixed(2)}</span>
-                      </div>
-                    </label>
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={applyWeeklyDiscount}
-                        onChange={(e) => setApplyWeeklyDiscount(e.target.checked)}
-                        disabled={nights < 7}
-                        className="w-4 h-4 rounded border-border accent-primary"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm font-medium">Weekly Discount (7+ nights)</span>
-                        {nights < 7 ? (
-                          <span className="text-xs text-muted-foreground ml-2">Requires 7+ nights</span>
-                        ) : (
-                          <span className="text-xs text-green-600 dark:text-green-400 ml-2">-$200.00</span>
-                        )}
-                      </div>
-                    </label>
-                  </div>
-                </>
-              )}
+              {/* VAT & Weekly Discount — available for all customers */}
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Adjustments</p>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={applyVat}
+                      onChange={(e) => setApplyVat(e.target.checked)}
+                      className="w-4 h-4 rounded border-border accent-primary"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium">Apply VAT ({motelSettings.vatRate}%)</span>
+                      <span className="text-xs text-muted-foreground ml-2">${vatAmount.toFixed(2)}</span>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={applyWeeklyDiscount}
+                      onChange={(e) => setApplyWeeklyDiscount(e.target.checked)}
+                      disabled={nights < 7}
+                      className="w-4 h-4 rounded border-border accent-primary"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium">Weekly Discount (7+ nights)</span>
+                      {nights < 7 ? (
+                        <span className="text-xs text-muted-foreground ml-2">Requires 7+ nights</span>
+                      ) : (
+                        <span className="text-xs text-green-600 dark:text-green-400 ml-2">-$200.00</span>
+                      )}
+                    </div>
+                  </label>
+                </div>
+              </>
 
               <Separator />
 
