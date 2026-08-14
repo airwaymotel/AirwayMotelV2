@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import {
   Camera, CheckCircle, RefreshCcw, Loader2, CameraOff, AlertTriangle, ShieldAlert,
   Upload, AlertCircle,
@@ -40,6 +40,7 @@ type Step = 'capture' | 'signature' | 'success';
 export default function MobileScanPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const sessionId = params.sessionId as string;
   const rawMode = searchParams.get('mode');
 
@@ -49,6 +50,9 @@ export default function MobileScanPage() {
   const isSignatureMode = rawMode === 'signature';
   // Treat barcode mode as photo mode on the phone — take a picture, let desktop AI extract data.
   const usePhotoCapture = !isSignatureMode;
+
+  // Detect admin flow: if the session was created by VisionScanner on this device
+  const isAdminFlow = typeof window !== 'undefined' && localStorage.getItem('airway_scan_session') === sessionId;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -236,6 +240,20 @@ export default function MobileScanPage() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Failed to submit. Please try again.');
+      }
+
+      // Admin flow: store result in localStorage and redirect back to home
+      if (isAdminFlow) {
+        localStorage.setItem('airway_scan_result', JSON.stringify({
+          sessionId,
+          imageBase64: imageSrc || undefined,
+          imageStorageUrl: imageStorageUrl || undefined,
+          signatureDataUrl,
+          termsAccepted: true,
+        }));
+        localStorage.removeItem('airway_scan_session');
+        router.push('/');
+        return;
       }
 
       setStep('success');

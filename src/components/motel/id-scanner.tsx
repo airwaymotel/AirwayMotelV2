@@ -445,6 +445,9 @@ function VisionScanner({
         });
         if (!res.ok) return;
 
+        // Store session ID in localStorage so scan page knows it's an admin flow
+        localStorage.setItem('airway_scan_session', id);
+
         // Redirect to the scan page
         router.push(`/scan/${id}?mode=photo`);
 

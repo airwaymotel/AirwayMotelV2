@@ -400,6 +400,76 @@ const STEPS = [
     toast.success('Guest signed on phone — review on the Terms & Sign step');
   }, []);
 
+  // ── Mobile scan result: detect scan completed on this device ──
+  useEffect(() => {
+    const raw = localStorage.getItem('airway_scan_result');
+    if (!raw) return;
+
+    try {
+      const result = JSON.parse(raw);
+      localStorage.removeItem('airway_scan_result');
+
+      // Store signature
+      if (result.signatureDataUrl) {
+        setSignatureDataUrl(result.signatureDataUrl);
+        setSignatureFromPhone(true);
+      }
+      if (result.termsAccepted) {
+        setTermsAccepted(true);
+      }
+
+      // Process ID image with AI to extract guest data
+      const imageUrl = result.imageStorageUrl || result.imageBase64;
+      if (imageUrl) {
+        setScannedIdImage(imageUrl);
+        setIdPhotoPreview(imageUrl);
+        setIdPhotoUrl(imageUrl);
+
+        toast.info('Processing scanned ID with AI...');
+        fetch('/api/scan-id', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: imageUrl }),
+        })
+          .then((res) => res.json())
+          .then(({ data: extracted }) => {
+            if (extracted) {
+              if (extracted.firstName) setFirstName(extracted.firstName);
+              if (extracted.lastName) setLastName(extracted.lastName);
+              if (extracted.idNumber) setIdNumber(extracted.idNumber);
+              if (extracted.idType) setIdType(extracted.idType);
+              if (extracted.issuingState) setIdState(extracted.issuingState);
+              if (extracted.dateOfBirth) setDateOfBirth(extracted.dateOfBirth);
+              if (extracted.gender) setGender(extracted.gender);
+              if (extracted.eyeColor) setEyeColor(extracted.eyeColor);
+              if (extracted.height) setHeight(extracted.height);
+              if (extracted.address) {
+                const parts = [
+                  extracted.address.street,
+                  extracted.address.city,
+                  extracted.address.state,
+                  extracted.address.zipCode,
+                ].filter(Boolean);
+                if (parts.length > 0) setAddress(parts.join(', '));
+              }
+              setIdScanned(true);
+              toast.success('ID scanned and guest details extracted! Review and add contact info.');
+            } else {
+              toast.error('Could not extract data from ID. Please fill in manually.');
+            }
+          })
+          .catch(() => {
+            toast.error('Failed to process ID. Please fill in manually.');
+          });
+      }
+
+      // Skip to Guest Details step (step 2) — admin reviews and adds phone/email
+      setStep(2);
+    } catch {
+      // Invalid data — ignore
+    }
+  }, []);
+
   // ── Step validation ──
   const canNext = (): boolean => {
     switch (step) {
