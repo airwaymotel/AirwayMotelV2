@@ -242,7 +242,7 @@ export default function MobileScanPage() {
         throw new Error(err.error || 'Failed to submit. Please try again.');
       }
 
-      // Admin flow: store result in localStorage and redirect back to home
+      // Admin flow: store result in localStorage, show success with Close button
       if (isAdminFlow) {
         localStorage.setItem('airway_scan_result', JSON.stringify({
           sessionId,
@@ -252,7 +252,7 @@ export default function MobileScanPage() {
           termsAccepted: true,
         }));
         localStorage.removeItem('airway_scan_session');
-        router.push('/');
+        setStep('success');
         return;
       }
 
@@ -488,10 +488,19 @@ export default function MobileScanPage() {
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center p-8 bg-zinc-950">
           <CheckCircle className="w-20 h-20 text-amber-500 mb-4" />
           <h2 className="text-xl font-bold mb-2">All Done!</h2>
-          <p className="text-zinc-400 max-w-xs">
-            Your ID {isBarcodeMode ? 'and signature ' : ''}have been securely transmitted to the front desk.
-            Please hand this device back to the clerk.
+          <p className="text-zinc-400 max-w-xs mb-6">
+            Your ID and signature have been securely transmitted.
           </p>
+          {isAdminFlow ? (
+            <button
+              onClick={() => router.push('/')}
+              className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-lg transition-colors"
+            >
+              Close
+            </button>
+          ) : (
+            <p className="text-zinc-500 text-sm">Please hand this device back to the clerk.</p>
+          )}
         </div>
       )}
     </div>

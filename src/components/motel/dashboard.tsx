@@ -114,7 +114,7 @@ export default function Dashboard() {
         <AnimateOnScroll delay={300}>
           <StatCard
             title="Today's Revenue"
-            value={`$${revenue}`}
+            value={`$${Math.round(revenue).toLocaleString()}`}
             badgeText="+12% vs yest"
             icon={DollarSign}
             isInverse

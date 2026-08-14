@@ -409,6 +409,14 @@ const STEPS = [
       const result = JSON.parse(raw);
       localStorage.removeItem('airway_scan_result');
 
+      // Restore room selection from localStorage
+      const savedRoomType = localStorage.getItem('airway_scan_room_type') as RoomType | null;
+      const savedRoomId = localStorage.getItem('airway_scan_room_id');
+      if (savedRoomType) setRoomType(savedRoomType);
+      if (savedRoomId) setSelectedRoomId(savedRoomId);
+      localStorage.removeItem('airway_scan_room_type');
+      localStorage.removeItem('airway_scan_room_id');
+
       // Store signature
       if (result.signatureDataUrl) {
         setSignatureDataUrl(result.signatureDataUrl);
@@ -463,12 +471,20 @@ const STEPS = [
           });
       }
 
-      // Go to Room Selection step — admin picks a room, then proceeds with pre-filled data
-      setStep(0);
+      // Skip to Guest Details step (step 2) — room was already selected before scan
+      setStep(2);
     } catch {
       // Invalid data — ignore
     }
   }, []);
+
+  // ── Save room selection before mobile scan redirect ──
+  useEffect(() => {
+    if (step === 1 && selectedRoomId) {
+      localStorage.setItem('airway_scan_room_type', roomType);
+      localStorage.setItem('airway_scan_room_id', selectedRoomId);
+    }
+  }, [step, selectedRoomId, roomType]);
 
   // ── Step validation ──
   const canNext = (): boolean => {
