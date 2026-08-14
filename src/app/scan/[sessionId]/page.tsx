@@ -487,20 +487,13 @@ export default function MobileScanPage() {
       {step === 'success' && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center p-8 bg-zinc-950">
           <CheckCircle className="w-20 h-20 text-amber-500 mb-4" />
-          <h2 className="text-xl font-bold mb-2">All Done!</h2>
-          <p className="text-zinc-400 max-w-xs mb-6">
-            Your ID and signature have been securely transmitted.
-          </p>
-          {isAdminFlow ? (
-            <button
-              onClick={() => router.push('/')}
-              className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-lg transition-colors"
-            >
-              Close
-            </button>
-          ) : (
-            <p className="text-zinc-500 text-sm">Please hand this device back to the clerk.</p>
-          )}
+          <h2 className="text-xl font-bold mb-6">Everything is done</h2>
+          <button
+            onClick={() => router.push('/')}
+            className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-lg transition-colors"
+          >
+            Close
+          </button>
         </div>
       )}
     </div>
