@@ -463,8 +463,8 @@ const STEPS = [
           });
       }
 
-      // Skip to Guest Details step (step 2) — admin reviews and adds phone/email
-      setStep(2);
+      // Go to Room Selection step — admin picks a room, then proceeds with pre-filled data
+      setStep(0);
     } catch {
       // Invalid data — ignore
     }
@@ -473,7 +473,7 @@ const STEPS = [
   // ── Step validation ──
   const canNext = (): boolean => {
     switch (step) {
-      case 0: return availableRooms.length > 0;
+      case 0: return selectedRoomId !== '';
       case 1:
         if (isReturningCustomer) return selectedReturningGuestId !== '';
         return idScanned && idNumber.length >= 4;
