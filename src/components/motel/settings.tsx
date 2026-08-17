@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/components/auth-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function Settings() {
   const router = useRouter();
+  const { logout } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -90,8 +92,8 @@ export default function Settings() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('airway_auth');
+  const handleLogout = async () => {
+    await logout();
     router.push('/login');
   };
 

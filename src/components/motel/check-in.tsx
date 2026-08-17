@@ -19,6 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { useMotelStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/components/auth-provider';
 import { toast } from 'sonner';
 import type { RoomType, PaymentMethod } from '@/lib/types';
 import IdScanner, { type ScannedIdData } from './id-scanner';
@@ -216,6 +217,7 @@ const STEPS = [
   const addActivity = useMotelStore((s) => s.addActivity);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
   const motelSettings = useMotelStore((s) => s.motelSettings);
+  const { user } = useAuth();
 
   // Step
   const [step, setStep] = useState(0);
@@ -596,6 +598,19 @@ const STEPS = [
           signature_data_url: signatureDataUrl,
         });
         if (error) console.error('Failed to save signature:', error);
+      }
+
+      // Log operator activity
+      if (supabase && user) {
+        await supabase.from('operator_activity').insert({
+          operator_id: user.id,
+          action: 'check_in',
+          stay_id: stayId,
+          guest_id: guestId,
+          room_id: selectedRoomId,
+          amount: totalDue,
+          description: `${firstName} ${lastName} — ${nights} night${nights > 1 ? 's' : ''} (${roomType})`,
+        });
       }
 
       setCompletedStayId(stayId);

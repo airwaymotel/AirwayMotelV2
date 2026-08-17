@@ -2,58 +2,34 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Lock, AlertCircle, Loader2 } from 'lucide-react';
+import { Lock, User, AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password.trim()) return;
+    if (!username.trim() || !password.trim()) return;
 
     setLoading(true);
     setError('');
 
-    try {
-      if (!supabase) {
-        // Fallback for local development without Supabase
-        if (password === '1234') {
-          localStorage.setItem('airway_auth', 'true');
-          router.push('/');
-          return;
-        } else {
-          throw new Error('Invalid password');
-        }
-      }
+    const result = await login(username, password);
 
-      // Query the custom admin table
-      const { data, error: sbError } = await supabase
-        .from('admin')
-        .select('password')
-        .limit(1)
-        .single();
-
-      if (sbError) {
-        throw new Error('Could not connect to authentication server');
-      }
-
-      if (data && data.password === password) {
-        localStorage.setItem('airway_auth', 'true');
-        router.push('/');
-      } else {
-        throw new Error('Invalid password');
-      }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred during login');
-    } finally {
+    if (result.error) {
+      setError(result.error);
       setLoading(false);
+    } else {
+      router.push('/');
     }
   };
 
@@ -81,7 +57,24 @@ export default function LoginPage() {
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
             <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider ml-1">
-              Admin Password
+              Username
+            </label>
+            <div className="relative">
+              <User className="absolute left-3 top-2.5 h-5 w-5 text-zinc-500" />
+              <Input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username..."
+                className="pl-10 bg-zinc-950 border-zinc-800 h-10 text-white"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider ml-1">
+              Password
             </label>
             <div className="relative">
               <Lock className="absolute left-3 top-2.5 h-5 w-5 text-zinc-500" />
@@ -91,7 +84,6 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password..."
                 className="pl-10 bg-zinc-950 border-zinc-800 h-10 text-white"
-                autoFocus
               />
             </div>
           </div>

@@ -13,24 +13,26 @@ import {
   Settings,
 } from 'lucide-react';
 import type { NavTab } from '@/lib/types';
+import type { Permission } from '@/lib/auth-types';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/components/auth-provider';
 
 interface SidebarProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
 }
 
-const navItems: { icon: typeof LayoutDashboard; label: string; tab: NavTab }[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', tab: 'dashboard' },
-  { icon: PlusSquare, label: 'New Check-In', tab: 'check-in' },
-  { icon: Bed, label: 'Room Status', tab: 'rooms' },
+const navItems: { icon: typeof LayoutDashboard; label: string; tab: NavTab; permission?: Permission }[] = [
+  { icon: LayoutDashboard, label: 'Dashboard', tab: 'dashboard', permission: 'view_dashboard' },
+  { icon: PlusSquare, label: 'New Check-In', tab: 'check-in', permission: 'check_in' },
+  { icon: Bed, label: 'Room Status', tab: 'rooms', permission: 'view_rooms' },
   { icon: LogOut, label: 'Checkout', tab: 'checkout' },
-  { icon: Users, label: 'Guest History', tab: 'guests' },
-  { icon: Settings, label: 'Settings', tab: 'settings' },
+  { icon: Users, label: 'Guest History', tab: 'guests', permission: 'view_guests' },
 ];
 
 export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const router = useRouter();
+  const { isSuperAdmin, hasPermission, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
   const handleNav = (tab: NavTab) => {
@@ -38,10 +40,10 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     router.push('/');
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('airway_auth');
-    router.push('/login');
-  };
+  const visibleItems = navItems.filter(item => {
+    if (!item.permission) return true;
+    return hasPermission(item.permission);
+  });
 
   return (
     <aside
@@ -50,129 +52,101 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         collapsed ? 'w-[68px]' : 'w-56 lg:w-64'
       )}
     >
-      {/* Toggle button */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-7 z-10 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center hover:bg-muted transition-colors cursor-pointer shadow-sm"
-      >
-        {collapsed ? (
-          <ChevronRight className="w-3 h-3 text-muted-foreground" />
-        ) : (
-          <ChevronLeft className="w-3 h-3 text-muted-foreground" />
-        )}
-      </button>
-
       {/* Brand */}
-      <button
-        onClick={() => { onTabChange('dashboard'); router.push('/'); }}
-        className={cn(
-          'px-5 pt-6 pb-5 border-b border-border flex items-center gap-3 cursor-pointer hover:bg-muted/50 transition-colors w-full text-left',
-          collapsed && 'justify-center px-2'
-        )}
-      >
-        <div className="shrink-0">
-          <svg width="36" height="36" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="40" height="40" rx="10" fill="#f59e0b" />
-            <path d="M12 28L20 12L28 28" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M15 22H25" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
+      <div className="h-14 flex items-center border-b border-border px-4 shrink-0">
         {!collapsed && (
-          <div>
-            <h1 className="text-lg font-bold text-foreground leading-none flex items-center gap-1">
-              <span>Airway</span>
-              <span className="text-amber-500 dark:text-amber-400">Motel</span>
-            </h1>
-            <p className="text-[10px] text-muted-foreground mt-1.5 uppercase tracking-widest font-bold">
-              Admin
-            </p>
-          </div>
+          <span className="text-sm font-bold">
+            <span className="text-foreground">Airway</span>
+            <span className="text-amber-600 ml-1">Motel</span>
+          </span>
         )}
-      </button>
+      </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-4 flex flex-col">
-        {!collapsed && (
-          <p className="text-[10px] text-muted-foreground px-5 mb-2 uppercase tracking-widest font-semibold">
-            Ledger
-          </p>
+      <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
+        {visibleItems.map(({ icon: Icon, label, tab }) => (
+          <button
+            key={tab}
+            onClick={() => handleNav(tab)}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+              activeTab === tab
+                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            <Icon className="w-5 h-5 shrink-0" />
+            {!collapsed && <span>{label}</span>}
+          </button>
+        ))}
+
+        {/* Settings — super admin only */}
+        {isSuperAdmin && (
+          <button
+            onClick={() => handleNav('settings')}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+              activeTab === 'settings'
+                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            <Settings className="w-5 h-5 shrink-0" />
+            {!collapsed && <span>Settings</span>}
+          </button>
         )}
-        {navItems.map((item) => {
-          const isActive = activeTab === item.tab;
-          return (
-            <button
-              key={item.tab}
-              onClick={() => handleNav(item.tab)}
-              className={cn(
-                'group relative flex items-center gap-3 transition-colors text-sm cursor-pointer',
-                collapsed ? 'justify-center px-2 py-3' : 'px-5 py-2.5',
-                isActive
-                  ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 font-semibold'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              )}
-              title={collapsed ? item.label : undefined}
-            >
-              <span
-                className={cn(
-                  'absolute left-0 top-0 bottom-0 w-[2px] transition-opacity',
-                  isActive ? 'bg-amber-500 dark:bg-amber-400 opacity-100' : 'opacity-0'
-                )}
-              />
-              <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-              {!collapsed && <span>{item.label}</span>}
-            </button>
-          );
-        })}
       </nav>
 
-      {/* Footer - Logout at bottom */}
-      <div className={cn('px-5 py-4 border-t border-border', collapsed && 'px-2')}>
+      {/* Footer */}
+      <div className="border-t border-border p-3 space-y-2">
         <button
-          onClick={handleLogout}
-          className={cn(
-            'flex items-center gap-3 w-full text-sm text-red-500 hover:bg-red-500/10 rounded-md transition-colors',
-            collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2'
-          )}
-          title={collapsed ? 'Logout' : undefined}
+          onClick={logout}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
         >
-          <LogOut className="w-4 h-4 shrink-0" />
-          {!collapsed && <span>Logout</span>}
+          <LogOut className="w-5 h-5 shrink-0" />
+          {!collapsed && <span>Log Out</span>}
         </button>
       </div>
+
+      {/* Collapse toggle */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="absolute -right-3 top-20 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      >
+        {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+      </button>
     </aside>
   );
 }
 
-// Mobile bottom navigation
+// Mobile Bottom Nav
 export function MobileNav({ activeTab, onTabChange }: SidebarProps) {
-  const router = useRouter();
+  const { isSuperAdmin, hasPermission, logout } = useAuth();
 
-  const handleNav = (tab: NavTab) => {
-    onTabChange(tab);
-    router.push('/');
-  };
-
-  // Filter out Settings from bottom nav (it's in the header instead)
-  const mobileItems = navItems.filter((item) => item.tab !== 'settings');
+  const mobileItems = navItems.filter(item => {
+    if (!item.permission) return true;
+    return hasPermission(item.permission);
+  });
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 flex justify-around items-center h-14 safe-area-bottom">
-      {mobileItems.map((item) => {
-        const isActive = activeTab === item.tab;
-        return (
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40">
+      <nav className="flex items-center justify-around h-14">
+        {mobileItems.map(({ icon: Icon, label, tab }) => (
           <button
-            key={item.tab}
-            onClick={() => handleNav(item.tab)}
+            key={tab}
+            onClick={() => onTabChange(tab)}
             className={cn(
-              'flex flex-col items-center justify-center gap-0.5 py-1 px-2 transition-colors cursor-pointer min-w-[48px] min-h-[44px]',
-              isActive ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
+              'flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors cursor-pointer',
+              activeTab === tab
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-muted-foreground'
             )}
           >
-            <item.icon className="w-5 h-5" strokeWidth={1.5} />
-            <span className="text-[9px] font-medium truncate max-w-[60px]">{item.label}</span>
+            <Icon className="w-5 h-5" />
+            <span className="text-[10px] font-medium">{label.split(' ').pop()}</span>
           </button>
-        );
-      })}
-    </nav>
+        ))}
+      </nav>
+    </div>
   );
 }

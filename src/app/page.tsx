@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Sun, Moon, User, DoorOpen, Settings as SettingsIcon } from 'lucide-react';
+import { Search, Sun, Moon, User, DoorOpen, Settings as SettingsIcon, LogOut, Shield, UserCircle } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useRouter } from 'next/navigation';
 import { useMotelStore } from '@/lib/store';
@@ -13,11 +13,24 @@ import Checkout from '@/components/motel/checkout';
 import Guests from '@/components/motel/guests';
 import Settings from '@/components/motel/settings';
 import AuthGuard from '@/components/auth-guard';
+import { useAuth } from '@/components/auth-provider';
+import SuperAdminProfile from '@/components/motel/super-admin-profile';
+import OperatorProfile from '@/components/motel/operator-profile';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PageSkeleton } from '@/components/ui/skeleton';
 import type { NavTab } from '@/lib/types';
+import type { Permission } from '@/lib/auth-types';
+
+const TAB_PERMISSIONS: Record<NavTab, Permission | null> = {
+  'dashboard': 'view_dashboard',
+  'rooms': 'view_rooms',
+  'check-in': 'check_in',
+  'checkout': null, // always allowed
+  'guests': 'view_guests',
+  'settings': null, // super admin only handled separately
+};
 
 export default function Home() {
   const router = useRouter();
@@ -26,7 +39,13 @@ export default function Home() {
   const dataLoaded = useMotelStore((s) => s.dataLoaded);
   const isLoading = useMotelStore((s) => s.isLoading);
   const { theme, setTheme } = useTheme();
+  const { user, hasPermission, isSuperAdmin, logout } = useAuth();
   const [now, setNow] = useState<Date | null>(null);
+
+  // Profile modal
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileDropdown, setProfileDropdown] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,11 +56,14 @@ export default function Home() {
   const getGuestStays = useMotelStore((s) => s.getGuestStays);
   const getActiveStays = useMotelStore((s) => s.getActiveStays);
 
-  // Close search on click outside
+  // Close dropdowns on click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setIsSearchOpen(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setProfileDropdown(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -92,7 +114,7 @@ export default function Home() {
     return results.slice(0, 8);
   })();
 
-  // Live clock — updates every second (start after mount to avoid hydration mismatch)
+  // Live clock
   useEffect(() => {
     setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -107,6 +129,15 @@ export default function Home() {
 
   const isDark = theme === 'dark';
   const toggleTheme = () => setTheme(isDark ? 'light' : 'dark');
+
+  // Filter tabs by permission
+  const isTabAllowed = (tab: NavTab): boolean => {
+    if (!user) return false;
+    if (isSuperAdmin) return true;
+    const required = TAB_PERMISSIONS[tab];
+    if (!required) return tab === 'settings' ? isSuperAdmin : true;
+    return hasPermission(required);
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -136,12 +167,16 @@ export default function Home() {
     'settings': 'Settings',
   };
 
+  const userInitials = user?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??';
+
   return (
     <AuthGuard>
       <div className="h-screen flex flex-col bg-background">
         <div className="flex flex-1">
           {/* Sidebar */}
-          <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+          <Sidebar activeTab={activeTab} onTabChange={(tab) => {
+            if (isTabAllowed(tab)) setActiveTab(tab);
+          }} />
 
           {/* Main Area */}
           <div className="flex-1 flex flex-col min-w-0">
@@ -177,7 +212,7 @@ export default function Home() {
                     }}
                   />
                   
-                  {/* Search Dropdown Overlay */}
+                  {/* Search Dropdown */}
                   {isSearchOpen && searchQuery.trim().length >= 2 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden z-50">
                       <div className="max-h-80 overflow-y-auto p-1">
@@ -212,7 +247,7 @@ export default function Home() {
                           })
                         ) : (
                           <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                            No results found for "{searchQuery}"
+                            No results found for &quot;{searchQuery}&quot;
                           </div>
                         )}
                       </div>
@@ -244,22 +279,62 @@ export default function Home() {
                 </Button>
 
                 {/* Settings (mobile/tablet only) */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => { setActiveTab('settings'); router.push('/'); }}
-                  className="lg:hidden h-8 w-8 text-muted-foreground"
-                  title="Settings"
-                >
-                  <SettingsIcon className="w-4 h-4" />
-                </Button>
+                {isSuperAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => { setActiveTab('settings'); router.push('/'); }}
+                    className="lg:hidden h-8 w-8 text-muted-foreground"
+                    title="Settings"
+                  >
+                    <SettingsIcon className="w-4 h-4" />
+                  </Button>
+                )}
 
-                {/* Admin */}
-                <div className="hidden lg:flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center justify-center text-[10px] font-bold">
-                    AD
-                  </div>
-                  <span className="text-xs text-muted-foreground">Admin</span>
+                {/* Profile Dropdown */}
+                <div className="relative" ref={profileRef}>
+                  <button
+                    onClick={() => setProfileDropdown(!profileDropdown)}
+                    className="hidden lg:flex items-center gap-2 hover:bg-muted rounded-lg px-2 py-1 transition-colors cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center justify-center text-[10px] font-bold">
+                      {userInitials}
+                    </div>
+                    <div className="text-left">
+                      <p className="text-xs font-medium leading-none">{user?.full_name}</p>
+                      <p className="text-[10px] text-muted-foreground capitalize">{user?.role?.replace('_', ' ')}</p>
+                    </div>
+                  </button>
+
+                  {profileDropdown && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-popover border border-border rounded-lg shadow-lg overflow-hidden z-50">
+                      <div className="p-2">
+                        <button
+                          onClick={() => { setShowProfile(true); setProfileDropdown(false); }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted rounded-md flex items-center gap-2 transition-colors"
+                        >
+                          <UserCircle className="w-4 h-4" />
+                          My Profile
+                        </button>
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => { setActiveTab('settings'); setProfileDropdown(false); router.push('/'); }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted rounded-md flex items-center gap-2 transition-colors"
+                          >
+                            <SettingsIcon className="w-4 h-4" />
+                            Settings
+                          </button>
+                        )}
+                        <button
+                          onClick={logout}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted rounded-md flex items-center gap-2 text-red-500 transition-colors"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Log Out
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </header>
@@ -276,7 +351,17 @@ export default function Home() {
         </div>
 
         {/* Mobile Bottom Nav */}
-        <MobileNav activeTab={activeTab} onTabChange={setActiveTab} />
+        <MobileNav activeTab={activeTab} onTabChange={(tab) => {
+          if (isTabAllowed(tab)) setActiveTab(tab);
+        }} />
+
+        {/* Profile Modals */}
+        {showProfile && isSuperAdmin && (
+          <SuperAdminProfile onClose={() => setShowProfile(false)} />
+        )}
+        {showProfile && !isSuperAdmin && (
+          <OperatorProfile onClose={() => setShowProfile(false)} />
+        )}
       </div>
     </AuthGuard>
   );
