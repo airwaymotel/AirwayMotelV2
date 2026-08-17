@@ -100,7 +100,7 @@ export default function GuestDetailsPage() {
               id: r.id as string,
               roomNumber: (r.room_number as string) || '',
               type: (r.type as Room['type']) || '1-bed',
-              rate: r.type === '2-bed' ? 85 : 65,
+              rate: (r.rate as number) || (r.type === '2-bed' ? 100 : 80),
               status: (r.status as Room['status']) || 'available',
             };
 

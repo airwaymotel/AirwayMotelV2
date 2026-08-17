@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Sun, Moon, User, DoorOpen, Settings as SettingsIcon, LogOut, Shield, UserCircle } from 'lucide-react';
+import { Search, Sun, Moon, User, DoorOpen, Settings as SettingsIcon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useRouter } from 'next/navigation';
 import { useMotelStore } from '@/lib/store';
@@ -14,8 +14,6 @@ import Guests from '@/components/motel/guests';
 import Settings from '@/components/motel/settings';
 import AuthGuard from '@/components/auth-guard';
 import { useAuth } from '@/components/auth-provider';
-import SuperAdminProfile from '@/components/motel/super-admin-profile';
-import OperatorProfile from '@/components/motel/operator-profile';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,13 +37,8 @@ export default function Home() {
   const dataLoaded = useMotelStore((s) => s.dataLoaded);
   const isLoading = useMotelStore((s) => s.isLoading);
   const { theme, setTheme } = useTheme();
-  const { user, hasPermission, isSuperAdmin, logout } = useAuth();
+  const { user, hasPermission, isSuperAdmin } = useAuth();
   const [now, setNow] = useState<Date | null>(null);
-
-  // Profile modal
-  const [showProfile, setShowProfile] = useState(false);
-  const [profileDropdown, setProfileDropdown] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,14 +49,11 @@ export default function Home() {
   const getGuestStays = useMotelStore((s) => s.getGuestStays);
   const getActiveStays = useMotelStore((s) => s.getActiveStays);
 
-  // Close dropdowns on click outside
+  // Close search on click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setIsSearchOpen(false);
-      }
-      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
-        setProfileDropdown(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -291,51 +281,19 @@ export default function Home() {
                   </Button>
                 )}
 
-                {/* Profile Dropdown */}
-                <div className="relative" ref={profileRef}>
-                  <button
-                    onClick={() => setProfileDropdown(!profileDropdown)}
-                    className="hidden lg:flex items-center gap-2 hover:bg-muted rounded-lg px-2 py-1 transition-colors cursor-pointer"
-                  >
-                    <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center justify-center text-[10px] font-bold">
-                      {userInitials}
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs font-medium leading-none">{user?.full_name}</p>
-                      <p className="text-[10px] text-muted-foreground capitalize">{user?.role?.replace('_', ' ')}</p>
-                    </div>
-                  </button>
-
-                  {profileDropdown && (
-                    <div className="absolute right-0 top-full mt-1 w-48 bg-popover border border-border rounded-lg shadow-lg overflow-hidden z-50">
-                      <div className="p-2">
-                        <button
-                          onClick={() => { setShowProfile(true); setProfileDropdown(false); }}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted rounded-md flex items-center gap-2 transition-colors"
-                        >
-                          <UserCircle className="w-4 h-4" />
-                          My Profile
-                        </button>
-                        {isSuperAdmin && (
-                          <button
-                            onClick={() => { setActiveTab('settings'); setProfileDropdown(false); router.push('/'); }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted rounded-md flex items-center gap-2 transition-colors"
-                          >
-                            <SettingsIcon className="w-4 h-4" />
-                            Settings
-                          </button>
-                        )}
-                        <button
-                          onClick={logout}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted rounded-md flex items-center gap-2 text-red-500 transition-colors"
-                        >
-                          <LogOut className="w-4 h-4" />
-                          Log Out
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                {/* Profile — clickable, navigates to /profile */}
+                <button
+                  onClick={() => router.push('/profile')}
+                  className="hidden lg:flex items-center gap-2 hover:bg-muted rounded-lg px-2 py-1 transition-colors cursor-pointer"
+                >
+                  <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center justify-center text-[10px] font-bold">
+                    {userInitials}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-medium leading-none">{user?.full_name}</p>
+                    <p className="text-[10px] text-muted-foreground capitalize">{user?.role?.replace('_', ' ')}</p>
+                  </div>
+                </button>
               </div>
             </header>
 
@@ -354,14 +312,6 @@ export default function Home() {
         <MobileNav activeTab={activeTab} onTabChange={(tab) => {
           if (isTabAllowed(tab)) setActiveTab(tab);
         }} />
-
-        {/* Profile Modals */}
-        {showProfile && isSuperAdmin && (
-          <SuperAdminProfile onClose={() => setShowProfile(false)} />
-        )}
-        {showProfile && !isSuperAdmin && (
-          <OperatorProfile onClose={() => setShowProfile(false)} />
-        )}
       </div>
     </AuthGuard>
   );

@@ -7,7 +7,10 @@ export type Permission =
   | 'view_guests'
   | 'view_payments'
   | 'download_receipts'
-  | 'download_forms';
+  | 'download_forms'
+  | 'edit_guests'
+  | 'edit_rooms'
+  | 'manage_discounts';
 
 export const ALL_PERMISSIONS: { value: Permission; label: string; description: string }[] = [
   { value: 'check_in', label: 'Check-In', description: 'Can complete guest check-ins' },
@@ -17,6 +20,9 @@ export const ALL_PERMISSIONS: { value: Permission; label: string; description: s
   { value: 'view_payments', label: 'Payments', description: 'Can view payment records' },
   { value: 'download_receipts', label: 'Receipts', description: 'Can download/print receipts' },
   { value: 'download_forms', label: 'Forms', description: 'Can download/print registration forms' },
+  { value: 'edit_guests', label: 'Edit Guests', description: 'Can edit guest details and delete guests' },
+  { value: 'edit_rooms', label: 'Edit Rooms', description: 'Can edit rooms, change status, and manage rates' },
+  { value: 'manage_discounts', label: 'Manage Discounts', description: 'Can toggle weekly discount during check-in' },
 ];
 
 export const SUPER_ADMIN_PERMISSIONS: Permission[] = [
@@ -27,6 +33,9 @@ export const SUPER_ADMIN_PERMISSIONS: Permission[] = [
   'view_payments',
   'download_receipts',
   'download_forms',
+  'edit_guests',
+  'edit_rooms',
+  'manage_discounts',
 ];
 
 export interface AuthUser {

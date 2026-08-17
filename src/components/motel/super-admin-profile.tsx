@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Users, Plus, Trash2, Save, X, ChevronDown, ChevronUp,
-  Loader2, UserCheck, UserX, DollarSign, ClipboardCheck,
-  Shield, Eye, EyeOff, Settings, RefreshCcw,
+  Users, Plus, Trash2, Save, X, Loader2, UserCheck, UserX,
+  DollarSign, ClipboardCheck, ArrowLeft, Eye,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,25 +14,22 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/components/auth-provider';
 import { toast } from 'sonner';
-import { ALL_PERMISSIONS, type OperatorWithStats, type OperatorActivity, type Permission } from '@/lib/auth-types';
+import type { OperatorWithStats } from '@/lib/auth-types';
 
-export default function SuperAdminProfile({ onClose }: { onClose: () => void }) {
-  const { user: currentUser } = useAuth();
+export default function SuperAdminProfile() {
+  const router = useRouter();
+  const { user: currentUser, logout } = useAuth();
   const [operators, setOperators] = useState<OperatorWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [activityData, setActivityData] = useState<OperatorActivity[]>([]);
-  const [activityLoading, setActivityLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Add form state
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newFullName, setNewFullName] = useState('');
-  const [saving, setSaving] = useState(false);
 
   const fetchOperators = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await fetch('/api/admin/operators');
       if (res.ok) {
@@ -40,14 +37,22 @@ export default function SuperAdminProfile({ onClose }: { onClose: () => void }) 
         setOperators(data.operators);
       }
     } catch {
-      toast.error('Failed to load operators');
+      // silent on poll
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Initial load + silent polling
   useEffect(() => {
     fetchOperators();
+    const interval = setInterval(fetchOperators, 5000);
+    const handleFocus = () => fetchOperators();
+    window.addEventListener('visibilitychange', handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('visibilitychange', handleFocus);
+    };
   }, [fetchOperators]);
 
   const handleAddOperator = async () => {
@@ -104,244 +109,135 @@ export default function SuperAdminProfile({ onClose }: { onClose: () => void }) 
     }
   };
 
-  const handleTogglePermission = async (opId: string, permission: Permission, currentEnabled: boolean) => {
-    const res = await fetch(`/api/admin/operators/${opId}/permissions`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ permissions: [{ permission, enabled: !currentEnabled }] }),
-    });
-    if (res.ok) {
-      fetchOperators();
-    }
-  };
-
-  const loadActivity = async (opId: string) => {
-    setActivityLoading(true);
-    try {
-      const res = await fetch(`/api/admin/operators/${opId}/activity?limit=20`);
-      if (res.ok) {
-        const data = await res.json();
-        setActivityData(data.activities);
-      }
-    } catch {
-      toast.error('Failed to load activity');
-    } finally {
-      setActivityLoading(false);
-    }
-  };
-
-  const handleExpand = (opId: string) => {
-    if (expandedId === opId) {
-      setExpandedId(null);
-      setActivityData([]);
-    } else {
-      setExpandedId(opId);
-      loadActivity(opId);
-    }
-  };
-
-  if (!currentUser) return null;
+  const userInitials = currentUser?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-start justify-center pt-8 px-4 overflow-y-auto">
-      <Card className="w-full max-w-2xl mb-8">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Shield className="w-5 h-5 text-amber-500" />
-            Operator Management
-          </CardTitle>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="w-4 h-4" />
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Add Operator */}
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">{operators.length} operator(s)</p>
-            <Button size="sm" onClick={() => setShowAddForm(!showAddForm)} className="gap-1.5">
-              <Plus className="w-4 h-4" /> Add Operator
-            </Button>
+    <div className="p-4 lg:p-6 max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="sm" onClick={() => router.push('/')} className="gap-1.5">
+          <ArrowLeft className="w-4 h-4" /> Back
+        </Button>
+      </div>
+
+      {/* Super Admin Info */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center">
+              <span className="text-2xl font-bold text-amber-500">{userInitials}</span>
+            </div>
+            <div>
+              <p className="text-lg font-bold">{currentUser?.full_name}</p>
+              <p className="text-sm text-muted-foreground">@{currentUser?.username}</p>
+              <Badge variant="default" className="mt-1 text-[10px]">Super Admin</Badge>
+            </div>
           </div>
-
-          {showAddForm && (
-            <Card className="bg-muted/30">
-              <CardContent className="pt-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">Username</Label>
-                    <Input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="e.g. op2" className="mt-1" />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Password</Label>
-                    <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Password" className="mt-1" />
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs">Full Name</Label>
-                  <Input value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="John Doe" className="mt-1" />
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={handleAddOperator} disabled={saving} className="gap-1.5">
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Create
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setShowAddForm(false)}>Cancel</Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Separator />
-
-          {/* Operator List */}
-          {loading ? (
-            <div className="flex items-center justify-center p-8">
-              <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
-            </div>
-          ) : operators.length === 0 ? (
-            <p className="text-center text-muted-foreground p-8">No operators yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {operators.map(op => (
-                <Card key={op.id} className={!op.is_active ? 'opacity-50' : ''}>
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
-                          <Users className="w-5 h-5 text-amber-500" />
-                        </div>
-                        <div>
-                          <p className="font-medium">{op.full_name}</p>
-                          <p className="text-xs text-muted-foreground">@{op.username}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={op.is_active ? 'default' : 'secondary'} className="text-[10px]">
-                          {op.is_active ? 'Active' : 'Disabled'}
-                        </Badge>
-                        <Button variant="ghost" size="sm" onClick={() => handleExpand(op.id)} className="gap-1">
-                          {expandedId === op.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Stats row */}
-                    <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <ClipboardCheck className="w-3.5 h-3.5" />
-                        {op.total_check_ins} check-ins
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <DollarSign className="w-3.5 h-3.5" />
-                        ${Math.round(op.total_revenue).toLocaleString()} revenue
-                      </span>
-                    </div>
-
-                    {/* Expanded details */}
-                    {expandedId === op.id && (
-                      <div className="mt-4 space-y-4">
-                        <Separator />
-
-                        {/* Permissions */}
-                        <div>
-                          <p className="text-xs font-semibold mb-2 flex items-center gap-1.5">
-                            <Settings className="w-3.5 h-3.5" /> Permissions
-                          </p>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {ALL_PERMISSIONS.map(p => {
-                              const enabled = op.permissions.includes(p.value);
-                              return (
-                                <button
-                                  key={p.value}
-                                  onClick={() => handleTogglePermission(op.id, p.value, enabled)}
-                                  className={`flex items-center justify-between p-2 rounded-lg border text-left text-xs transition-colors ${
-                                    enabled
-                                      ? 'border-green-500/30 bg-green-500/5'
-                                      : 'border-border hover:border-primary/40'
-                                  }`}
-                                >
-                                  <span>
-                                    <span className="font-medium">{p.label}</span>
-                                    <span className="text-muted-foreground ml-1">— {p.description}</span>
-                                  </span>
-                                  {enabled ? (
-                                    <Eye className="w-4 h-4 text-green-500 shrink-0" />
-                                  ) : (
-                                    <EyeOff className="w-4 h-4 text-muted-foreground shrink-0" />
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant={op.is_active ? 'outline' : 'default'}
-                            onClick={() => handleToggleActive(op)}
-                            className="gap-1.5"
-                          >
-                            {op.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                            {op.is_active ? 'Disable' : 'Enable'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeleteOperator(op)}
-                            className="gap-1.5"
-                          >
-                            <Trash2 className="w-4 h-4" /> Delete
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => loadActivity(op.id)}
-                            className="gap-1.5"
-                          >
-                            <RefreshCcw className="w-4 h-4" /> Refresh
-                          </Button>
-                        </div>
-
-                        {/* Recent Activity */}
-                        <div>
-                          <p className="text-xs font-semibold mb-2">Recent Activity</p>
-                          {activityLoading ? (
-                            <div className="flex items-center justify-center p-4">
-                              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                            </div>
-                          ) : activityData.length === 0 ? (
-                            <p className="text-xs text-muted-foreground p-4 text-center">No activity yet.</p>
-                          ) : (
-                            <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                              {activityData.map(act => (
-                                <div key={act.id} className="flex items-center justify-between text-xs p-2 rounded bg-muted/30">
-                                  <div>
-                                    <span className="font-medium">{act.action}</span>
-                                    {act.guest_name && <span className="text-muted-foreground ml-1">— {act.guest_name}</span>}
-                                    {act.room_number && <span className="text-muted-foreground ml-1">Room {act.room_number}</span>}
-                                  </div>
-                                  <div className="text-right">
-                                    {act.amount > 0 && <span className="text-green-600">${Number(act.amount).toFixed(2)}</span>}
-                                    <span className="text-muted-foreground ml-2">
-                                      {new Date(act.created_at).toLocaleDateString()}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      {/* Operators Section */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Users className="w-5 h-5 text-amber-500" />
+            Operators
+            <Badge variant="secondary" className="text-xs">{operators.length}</Badge>
+          </h2>
+          <Button size="sm" onClick={() => setShowAddForm(!showAddForm)} className="gap-1.5">
+            <Plus className="w-4 h-4" /> Add Operator
+          </Button>
+        </div>
+
+        {/* Add Form */}
+        {showAddForm && (
+          <Card className="mb-4 bg-muted/30">
+            <CardContent className="pt-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Username</Label>
+                  <Input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="e.g. op2" className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs">Password</Label>
+                  <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Password" className="mt-1" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">Full Name</Label>
+                <Input value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="John Doe" className="mt-1" />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleAddOperator} disabled={saving} className="gap-1.5">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Create
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setShowAddForm(false)}>Cancel</Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Operator List */}
+        {loading ? (
+          <div className="flex items-center justify-center p-12">
+            <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
+          </div>
+        ) : operators.length === 0 ? (
+          <Card>
+            <CardContent className="p-12 text-center text-muted-foreground">
+              No operators yet. Add one to get started.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {operators.map(op => (
+              <Card
+                key={op.id}
+                className={`cursor-pointer hover:border-amber-500/40 transition-colors ${!op.is_active ? 'opacity-50' : ''}`}
+                onClick={() => router.push(`/admin/operators/${op.id}`)}
+              >
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+                        <Users className="w-5 h-5 text-amber-500" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{op.full_name}</p>
+                        <p className="text-xs text-muted-foreground">@{op.username}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right text-xs text-muted-foreground hidden sm:block">
+                        <span className="flex items-center gap-1">
+                          <ClipboardCheck className="w-3.5 h-3.5" />
+                          {op.total_check_ins} check-ins
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <DollarSign className="w-3.5 h-3.5" />
+                          ${Math.round(op.total_revenue).toLocaleString()}
+                        </span>
+                      </div>
+                      <Badge variant={op.is_active ? 'default' : 'secondary'} className="text-[10px]">
+                        {op.is_active ? 'Active' : 'Disabled'}
+                      </Badge>
+                      <Eye className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Logout */}
+      <div className="pt-4">
+        <Button variant="destructive" onClick={logout} className="gap-1.5">
+          <X className="w-4 h-4" /> Log Out
+        </Button>
+      </div>
     </div>
   );
 }

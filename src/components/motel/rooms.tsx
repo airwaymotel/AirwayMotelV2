@@ -18,6 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useMotelStore } from '@/lib/store';
+import { useAuth } from '@/components/auth-provider';
 import { toast } from 'sonner';
 import RoomCard from './room-card';
 import AnimateOnScroll from '@/components/ui/animate-on-scroll';
@@ -35,6 +36,8 @@ const STATUS_OPTIONS: { value: RoomStatus; label: string; color: string }[] = [
 
 export default function Rooms() {
   const router = useRouter();
+  const { isSuperAdmin, hasPermission } = useAuth();
+  const canEditRooms = hasPermission('edit_rooms');
   const rooms = useMotelStore((s) => s.rooms);
   const stays = useMotelStore((s) => s.stays);
   const guests = useMotelStore((s) => s.guests);
@@ -230,16 +233,20 @@ export default function Rooms() {
             <RotateCcw className={`w-4 h-4 ${refreshing ? 'animate-spin-slow' : ''}`} />
           </Button>
 
-          {/* Settings Button */}
-          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => { setSettings(motelSettings); setShowSettings(true); }}>
-            <Settings className="w-4 h-4" />
-          </Button>
+          {/* Settings Button — super admin only */}
+          {isSuperAdmin && (
+            <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => { setSettings(motelSettings); setShowSettings(true); }}>
+              <Settings className="w-4 h-4" />
+            </Button>
+          )}
 
-          {/* Add Room Button */}
-          <Button size="sm" onClick={() => setShowAddDialog(true)} className="h-9">
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add Room
-          </Button>
+          {/* Add Room Button — requires edit_rooms permission */}
+          {canEditRooms && (
+            <Button size="sm" onClick={() => setShowAddDialog(true)} className="h-9">
+              <Plus className="w-4 h-4 mr-1.5" />
+              Add Room
+            </Button>
+          )}
         </div>
       </div>
 
@@ -618,46 +625,56 @@ export default function Rooms() {
 
                   {/* ── Status Change + Actions (always visible) ── */}
                   <div className="space-y-5 mt-6">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3">Change Status</p>
-                      <div className="flex flex-wrap gap-2">
-                        {STATUS_OPTIONS.map((s) => (
-                          <Button
-                            key={s.value}
-                            variant={selectedRoom.status === s.value ? 'default' : 'outline'}
-                            size="sm"
-                            className="text-xs gap-1.5"
-                            onClick={() => {
-                              updateRoomStatus(selectedRoom.id, s.value);
-                              setSelectedRoom({ ...selectedRoom, status: s.value });
-                            }}
-                          >
-                            <span className={`w-2 h-2 rounded-full ${s.color} shrink-0`} />
-                            {s.label}
-                          </Button>
-                        ))}
+                    {selectedRoom.status === 'occupied' && activeStay ? (
+                      <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3">
+                        <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                          This room is occupied. Status cannot be changed until checkout.
+                        </p>
                       </div>
-                    </div>
+                    ) : canEditRooms ? (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider mb-3">Change Status</p>
+                        <div className="flex flex-wrap gap-2">
+                          {STATUS_OPTIONS.map((s) => (
+                            <Button
+                              key={s.value}
+                              variant={selectedRoom.status === s.value ? 'default' : 'outline'}
+                              size="sm"
+                              className="text-xs gap-1.5"
+                              onClick={() => {
+                                updateRoomStatus(selectedRoom.id, s.value);
+                                setSelectedRoom({ ...selectedRoom, status: s.value });
+                              }}
+                            >
+                              <span className={`w-2 h-2 rounded-full ${s.color} shrink-0`} />
+                              {s.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
 
                     <Separator />
 
-                    <div className="flex gap-3">
-                      <Button
-                        variant="outline"
-                        className="flex-1 h-10 text-xs"
-                        onClick={startEditing}
-                      >
-                        <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Room
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        className="flex-1 h-10 text-xs"
-                        onClick={() => setShowDeleteConfirm(true)}
-                        disabled={selectedRoom.status === 'occupied'}
-                      >
-                        <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Room
-                      </Button>
-                    </div>
+                    {canEditRooms && (
+                      <div className="flex gap-3">
+                        <Button
+                          variant="outline"
+                          className="flex-1 h-10 text-xs"
+                          onClick={startEditing}
+                        >
+                          <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Room
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          className="flex-1 h-10 text-xs"
+                          onClick={() => setShowDeleteConfirm(true)}
+                          disabled={selectedRoom.status === 'occupied'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Room
+                        </Button>
+                      </div>
+                    )}
                     {selectedRoom.status === 'occupied' && (
                       <p className="text-[10px] text-muted-foreground text-center">
                         Cannot delete an occupied room. Check out the guest first.
@@ -699,6 +716,17 @@ export default function Rooms() {
                   onChange={(e) => setSettings({ ...settings, twoBedRate: Number(e.target.value) || 0 })}
                 />
               </div>
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <Label className="text-xs">Weekly Discount Amount ($, for 7+ night stays)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={settings.weeklyDiscountAmount}
+                onChange={(e) => setSettings({ ...settings, weeklyDiscountAmount: Number(e.target.value) || 0 })}
+              />
             </div>
           </div>
           <DialogFooter>

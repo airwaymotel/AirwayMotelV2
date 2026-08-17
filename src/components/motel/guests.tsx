@@ -19,12 +19,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useMotelStore } from '@/lib/store';
+import { useAuth } from '@/components/auth-provider';
 import { toast } from 'sonner';
 import AnimateOnScroll from '@/components/ui/animate-on-scroll';
 import type { Guest } from '@/lib/types';
 
 export default function Guests() {
    const router = useRouter();
+   const { hasPermission } = useAuth();
+   const canEditGuests = hasPermission('edit_guests');
    const guests = useMotelStore((s) => s.guests);
   const stays = useMotelStore((s) => s.stays);
   const rooms = useMotelStore((s) => s.rooms);
@@ -277,22 +280,18 @@ export default function Guests() {
       {/* Filters */}
       <Card className="no-print">
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-            <div className="md:col-span-4 relative">
-              <label className="block text-[10px] text-muted-foreground uppercase font-semibold mb-1">Guest Search</label>
-              <Search className="absolute left-2.5 top-[26px] text-muted-foreground w-4 h-4" />
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex-1">
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8"
-                placeholder="Name, ID, Phone, or Receipt ID..."
+                placeholder="Search by name, ID, phone..."
               />
             </div>
-            <div className="md:col-span-3">
-              <label className="block text-[10px] text-muted-foreground uppercase font-semibold mb-1">Room Type</label>
+            <div className="w-full sm:w-44">
               <Select value={roomTypeFilter} onValueChange={setRoomTypeFilter}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Room Type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All Types">All Types</SelectItem>
@@ -301,14 +300,13 @@ export default function Guests() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="md:col-span-3">
-              <label className="block text-[10px] text-muted-foreground uppercase font-semibold mb-1">Status</label>
+            <div className="w-full sm:w-40">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All</SelectItem>
+                  <SelectItem value="All">All Status</SelectItem>
                   <SelectItem value="Active">Active</SelectItem>
                   <SelectItem value="Completed">Completed</SelectItem>
                 </SelectContent>
@@ -393,18 +391,20 @@ export default function Guests() {
                     </TableCell>
                     <TableCell className="text-right no-print" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-[11px] font-medium text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:hover:bg-blue-950"
-                          title="Edit Guest"
-                          onClick={() => {
-                            const guest = guests.find((g) => g.id === row.guestId);
-                            if (guest) handleEditClick(guest);
-                          }}
-                        >
-                          Edit
-                        </Button>
+                        {canEditGuests && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-[11px] font-medium text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:hover:bg-blue-950"
+                            title="Edit Guest"
+                            onClick={() => {
+                              const guest = guests.find((g) => g.id === row.guestId);
+                              if (guest) handleEditClick(guest);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        )}
                         {row.hasCash && (
                           <Button
                             variant="outline"
@@ -416,15 +416,17 @@ export default function Guests() {
                             Receipt
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          title="Delete Guest"
-                          onClick={() => handleDeleteClick(row.guestId, row.name)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {canEditGuests && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            title="Delete Guest"
+                            onClick={() => handleDeleteClick(row.guestId, row.name)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

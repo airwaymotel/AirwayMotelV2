@@ -217,7 +217,7 @@ const STEPS = [
   const addActivity = useMotelStore((s) => s.addActivity);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
   const motelSettings = useMotelStore((s) => s.motelSettings);
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
 
   // Step
   const [step, setStep] = useState(0);
@@ -276,6 +276,7 @@ const STEPS = [
   // VAT & Discount toggles (admin selects per customer in payment step)
   const [applyVat, setApplyVat] = useState(false);
   const [applyWeeklyDiscount, setApplyWeeklyDiscount] = useState(false);
+  const [weeklyDiscountInput, setWeeklyDiscountInput] = useState(motelSettings.weeklyDiscountAmount.toString());
 
   // Phone signature flow
   const [showPhoneSignature, setShowPhoneSignature] = useState(false);
@@ -302,7 +303,8 @@ const STEPS = [
 
   const subtotal = rate * nights;
   const vatAmount = applyVat ? subtotal * (motelSettings.vatRate / 100) : 0;
-  const weeklyDiscount = applyWeeklyDiscount && nights >= 7 ? 200 : 0;
+    const weeklyDiscountAmount = Number(weeklyDiscountInput) || 0;
+    const weeklyDiscount = applyWeeklyDiscount && nights >= 7 ? weeklyDiscountAmount : 0;
   const totalDue = subtotal + vatAmount - weeklyDiscount;
 
   // ── Manual file upload handler ──
@@ -1142,23 +1144,41 @@ const STEPS = [
                       <span className="text-xs text-muted-foreground ml-2">${vatAmount.toFixed(2)}</span>
                     </div>
                   </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={applyWeeklyDiscount}
-                      onChange={(e) => setApplyWeeklyDiscount(e.target.checked)}
-                      disabled={nights < 7}
-                      className="w-4 h-4 rounded border-border accent-primary"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium">Weekly Discount (7+ nights)</span>
-                      {nights < 7 ? (
-                        <span className="text-xs text-muted-foreground ml-2">Requires 7+ nights</span>
-                      ) : (
-                        <span className="text-xs text-green-600 dark:text-green-400 ml-2">-$200.00</span>
-                      )}
-                    </div>
-                  </label>
+                   <div className="space-y-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={applyWeeklyDiscount}
+                        onChange={(e) => setApplyWeeklyDiscount(e.target.checked)}
+                        disabled={nights < 7 || !hasPermission('manage_discounts')}
+                        className="w-4 h-4 rounded border-border accent-primary"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium">Weekly Discount (7+ nights)</span>
+                        {nights < 7 && (
+                          <span className="text-xs text-muted-foreground ml-2">Requires 7+ nights</span>
+                        )}
+                        {!hasPermission('manage_discounts') && nights >= 7 && (
+                          <span className="text-xs text-muted-foreground ml-2">No permission</span>
+                        )}
+                      </div>
+                    </label>
+                    {applyWeeklyDiscount && nights >= 7 && hasPermission('manage_discounts') && (
+                      <div className="flex items-center gap-2 ml-7">
+                        <span className="text-sm text-muted-foreground">$</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={weeklyDiscountInput}
+                          onChange={(e) => setWeeklyDiscountInput(e.target.value)}
+                          className="w-28 h-8 text-sm"
+                          placeholder="0"
+                        />
+                        <span className="text-xs text-muted-foreground">discount</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </>
 

@@ -26,7 +26,10 @@ CREATE TABLE IF NOT EXISTS operator_permissions (
     'view_guests',
     'view_payments',
     'download_receipts',
-    'download_forms'
+    'download_forms',
+    'edit_guests',
+    'edit_rooms',
+    'manage_discounts'
   )),
   enabled BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -73,7 +76,9 @@ CROSS JOIN (VALUES
   ('view_guests'),
   ('view_payments'),
   ('download_receipts'),
-  ('download_forms')
+  ('download_forms'),
+  ('edit_guests'),
+  ('edit_rooms')
 ) AS p(permission)
 WHERE u.username = 'opone'
 ON CONFLICT (user_id, permission) DO NOTHING;

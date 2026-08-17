@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Check session on mount
+  // Check session on mount + poll every 5s for real-time permission sync
   useEffect(() => {
     const checkSession = async () => {
       try {
@@ -47,6 +47,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
     checkSession();
+
+    const interval = setInterval(checkSession, 5000);
+    const handleFocus = () => checkSession();
+    window.addEventListener('visibilitychange', handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('visibilitychange', handleFocus);
+    };
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {
