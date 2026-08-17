@@ -78,7 +78,13 @@ CROSS JOIN (VALUES
 WHERE u.username = 'opone'
 ON CONFLICT (user_id, permission) DO NOTHING;
 
--- 7. ROW LEVEL SECURITY (optional — enable if needed)
--- ALTER TABLE users ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE operator_permissions ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE operator_activity ENABLE ROW LEVEL SECURITY;
+-- 7. ROW LEVEL SECURITY
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE operator_permissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE operator_activity ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access for login
+CREATE POLICY "Allow public read users" ON users FOR SELECT USING (true);
+CREATE POLICY "Allow admin write users" ON users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public operator_permissions" ON operator_permissions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public operator_activity" ON operator_activity FOR ALL USING (true) WITH CHECK (true);

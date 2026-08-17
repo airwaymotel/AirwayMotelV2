@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error || !user) {
-      return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
+      console.error('[Login] Supabase query error:', error?.message, error?.code);
+      return NextResponse.json({ error: 'Invalid username or password', detail: error?.message }, { status: 401 });
     }
 
     if (!user.is_active) {
