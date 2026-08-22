@@ -230,11 +230,11 @@ export default function GuestDetailsPage() {
         {/* Guest Profile Card */}
         <div className="lg:col-span-2 bg-card border border-border rounded-xl p-6">
           <div className="flex items-start gap-5 mb-6">
-            <Avatar className="h-20 w-20">
-              <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-bold">
-                {(guest.firstName || '?')[0]}{(guest.lastName || '?')[0]}
-              </AvatarFallback>
-            </Avatar>
+            <img
+              src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(`${guest.firstName} ${guest.lastName}`)}`}
+              alt="avatar"
+              className="h-20 w-20 rounded-full bg-muted"
+            />
             <div className="flex-1">
               <h1 className="text-2xl font-bold">
                 {guest.firstName} {guest.lastName}

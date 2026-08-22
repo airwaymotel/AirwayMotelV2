@@ -441,11 +441,11 @@ export default function Rooms() {
                           <User className="w-3.5 h-3.5" /> Current Guest
                         </p>
                         <div className="flex items-center gap-4">
-                          <Avatar className="h-12 w-12 shrink-0">
-                            <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
-                              {(activeStay.guest.firstName || '?')[0]}{(activeStay.guest.lastName || '?')[0]}
-                            </AvatarFallback>
-                          </Avatar>
+                          <img
+                            src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(`${activeStay.guest.firstName} ${activeStay.guest.lastName}`)}`}
+                            alt="avatar"
+                            className="h-12 w-12 rounded-full bg-muted shrink-0"
+                          />
                           <div className="space-y-1.5">
                             <p className="text-sm font-semibold">
                               {activeStay.guest.firstName} {activeStay.guest.lastName}

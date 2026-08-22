@@ -19,7 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { useMotelStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/components/auth-provider';
+import { useAuth, authFetch } from '@/components/auth-provider';
 import { toast } from 'sonner';
 import type { RoomType, PaymentMethod } from '@/lib/types';
 import IdScanner, { type ScannedIdData } from './id-scanner';
@@ -51,7 +51,7 @@ function PhoneSignaturePanel({
       const id = crypto.randomUUID();
 
       try {
-        const res = await fetch('/api/scan-session', {
+        const res = await authFetch('/api/scan-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'create', sessionId: id, mode: 'signature' }),
@@ -80,7 +80,7 @@ function PhoneSignaturePanel({
 
       pollingRef.current = setInterval(async () => {
         try {
-          const res = await fetch(`/api/scan-session?sessionId=${id}`);
+          const res = await authFetch(`/api/scan-session?sessionId=${id}`);
           if (!res.ok) return;
 
           const data = await res.json();
@@ -91,7 +91,7 @@ function PhoneSignaturePanel({
               pollingRef.current = null;
             }
 
-            fetch(`/api/scan-session?sessionId=${id}`, { method: 'DELETE' }).catch(() => {});
+            authFetch(`/api/scan-session?sessionId=${id}`, { method: 'DELETE' }).catch(() => {});
 
             if (!cancelled) {
               setStatus('received');
@@ -438,7 +438,7 @@ const STEPS = [
         setIdPhotoUrl(imageUrl);
 
         toast.info('Processing scanned ID with AI...');
-        fetch('/api/scan-id', {
+        authFetch('/api/scan-id', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: imageUrl }),

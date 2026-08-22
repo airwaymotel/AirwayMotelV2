@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
 import { supabase } from '@/lib/supabase';
+import { authFetch } from '@/components/auth-provider';
 
 const TERMS_HEADER =
   'By signing below, as a guest of AIRWAY MOTEL, you state that you have fully read the statements and conditions below and agree to abide by them, without exception, while staying at AIRWAY MOTEL.';
@@ -204,7 +205,7 @@ export default function MobileScanPage() {
       // Upload the image to the 'ids' bucket for the permanent record
       if (supabase && imageSrc) {
         try {
-          const res = await fetch(imageSrc);
+          const res = await authFetch(imageSrc);
           const blob = await res.blob();
           const fileName = `id_${sessionId}_${Date.now()}.jpg`;
           const { error: uploadError } = await supabase.storage
@@ -223,7 +224,7 @@ export default function MobileScanPage() {
       }
 
       // Write everything to the scan_sessions row so the desktop can pick it up
-      const res = await fetch('/api/scan-session', {
+      const res = await authFetch('/api/scan-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

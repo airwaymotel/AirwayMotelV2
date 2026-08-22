@@ -365,9 +365,16 @@ export default function Guests() {
                     onClick={() => router.push(`/guest/${row.guestId}`)}
                   >
                     <TableCell>
-                      <div>
-                        <p className="text-sm font-medium">{row.name}</p>
-                        <p className="text-[11px] text-muted-foreground font-mono">{row.id}</p>
+                      <div className="flex items-center gap-2.5">
+                        <img
+                          src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(row.name)}`}
+                          alt={row.name}
+                          className="w-8 h-8 rounded-full bg-muted shrink-0"
+                        />
+                        <div>
+                          <p className="text-sm font-medium">{row.name}</p>
+                          <p className="text-[11px] text-muted-foreground font-mono">{row.id}</p>
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>

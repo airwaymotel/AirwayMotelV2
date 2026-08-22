@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getSessionUser();
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getSessionUser(req);
   if (!user || user.role !== 'super_admin') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getSessionUser();
+  const user = await getSessionUser(req);
   if (!user || user.role !== 'super_admin') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }

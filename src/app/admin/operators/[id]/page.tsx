@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { useAuth } from '@/components/auth-provider';
+import { useAuth, authFetch } from '@/components/auth-provider';
 import AuthGuard from '@/components/auth-guard';
 import { toast } from 'sonner';
 import { ALL_PERMISSIONS, type OperatorWithStats, type OperatorActivity, type Permission } from '@/lib/auth-types';
@@ -35,7 +35,7 @@ export default function OperatorDetailPage({ params }: { params: Promise<{ id: s
 
   const fetchOperator = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/operators');
+      const res = await authFetch('/api/admin/operators');
       if (res.ok) {
         const data = await res.json();
         const op = data.operators.find((o: OperatorWithStats) => o.id === id);
@@ -53,7 +53,7 @@ export default function OperatorDetailPage({ params }: { params: Promise<{ id: s
 
   const fetchActivity = useCallback(async () => {
     try {
-      const res = await fetch(`/api/admin/operators/${id}/activity?limit=50`);
+      const res = await authFetch(`/api/admin/operators/${id}/activity?limit=50`);
       if (res.ok) {
         const data = await res.json();
         setActivities(data.activities);
@@ -94,7 +94,7 @@ export default function OperatorDetailPage({ params }: { params: Promise<{ id: s
   const handleUpdateName = async () => {
     if (!editName.trim()) return;
     setSaving(true);
-    const res = await fetch(`/api/admin/operators/${id}`, {
+    const res = await authFetch(`/api/admin/operators/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ full_name: editName }),
@@ -111,7 +111,7 @@ export default function OperatorDetailPage({ params }: { params: Promise<{ id: s
   const handleUpdatePassword = async () => {
     if (!editPassword) return;
     setSaving(true);
-    const res = await fetch(`/api/admin/operators/${id}`, {
+    const res = await authFetch(`/api/admin/operators/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: editPassword }),
@@ -127,7 +127,7 @@ export default function OperatorDetailPage({ params }: { params: Promise<{ id: s
 
   const handleToggleActive = async () => {
     if (!operator) return;
-    const res = await fetch(`/api/admin/operators/${id}`, {
+    const res = await authFetch(`/api/admin/operators/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_active: !operator.is_active }),
@@ -140,7 +140,7 @@ export default function OperatorDetailPage({ params }: { params: Promise<{ id: s
 
   const handleDelete = async () => {
     if (!confirm(`Delete this operator? This cannot be undone.`)) return;
-    const res = await fetch(`/api/admin/operators/${id}`, { method: 'DELETE' });
+    const res = await authFetch(`/api/admin/operators/${id}`, { method: 'DELETE' });
     if (res.ok) {
       toast.success('Operator deleted');
       router.push('/profile');
@@ -151,7 +151,7 @@ export default function OperatorDetailPage({ params }: { params: Promise<{ id: s
   };
 
   const handleTogglePermission = async (permission: Permission, currentEnabled: boolean) => {
-    const res = await fetch(`/api/admin/operators/${id}/permissions`, {
+    const res = await authFetch(`/api/admin/operators/${id}/permissions`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ permissions: [{ permission, enabled: !currentEnabled }] }),
@@ -201,11 +201,11 @@ export default function OperatorDetailPage({ params }: { params: Promise<{ id: s
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-amber-500">
-                    {operator.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                  </span>
-                </div>
+                <img
+                  src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(operator.full_name)}`}
+                  alt="avatar"
+                  className="w-16 h-16 rounded-full bg-muted"
+                />
                 <div>
                   <p className="text-lg font-bold">{operator.full_name}</p>
                   <p className="text-sm text-muted-foreground">@{operator.username}</p>

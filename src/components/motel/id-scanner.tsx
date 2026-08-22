@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { authFetch } from '@/components/auth-provider';
 // import { parseAAMVA, partialScannedIdFromRaw } from '@/lib/parse-aamva'; // BARCODE: uncomment when re-enabling barcode scanning
 import type { ScannedIdData } from '@/lib/parse-aamva';
 
@@ -227,7 +228,7 @@ function PhoneScanPanel({
 
       // Create the session row in the database
       try {
-        const res = await fetch('/api/scan-session', {
+        const res = await authFetch('/api/scan-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'create', sessionId: id, mode: 'photo' }),
@@ -257,7 +258,7 @@ function PhoneScanPanel({
       // Poll until the phone uploads
       pollingRef.current = setInterval(async () => {
         try {
-          const res = await fetch(`/api/scan-session?sessionId=${id}`);
+          const res = await authFetch(`/api/scan-session?sessionId=${id}`);
           if (!res.ok) return;
 
           const data = await res.json();
@@ -269,7 +270,7 @@ function PhoneScanPanel({
             }
 
             // Mark the row consumed so it can't be read again
-            fetch(`/api/scan-session?sessionId=${id}`, { method: 'DELETE' }).catch(() => {});
+            authFetch(`/api/scan-session?sessionId=${id}`, { method: 'DELETE' }).catch(() => {});
 
             if (!cancelled) {
               setStatus('received');
@@ -438,7 +439,7 @@ function VisionScanner({
     const createAndRedirect = async () => {
       const id = crypto.randomUUID();
       try {
-        const res = await fetch('/api/scan-session', {
+        const res = await authFetch('/api/scan-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'create', sessionId: id, mode: 'photo' }),
@@ -454,7 +455,7 @@ function VisionScanner({
         // Start polling for the result
         pollingRef.current = setInterval(async () => {
           try {
-            const pollRes = await fetch(`/api/scan-session?sessionId=${id}`);
+            const pollRes = await authFetch(`/api/scan-session?sessionId=${id}`);
             if (!pollRes.ok) return;
             const data = await pollRes.json();
 
@@ -464,7 +465,7 @@ function VisionScanner({
                 pollingRef.current = null;
               }
               // Mark consumed
-              fetch(`/api/scan-session?sessionId=${id}`, { method: 'DELETE' }).catch(() => {});
+              authFetch(`/api/scan-session?sessionId=${id}`, { method: 'DELETE' }).catch(() => {});
 
               if (data.signatureDataUrl) {
                 onSignatureReceivedRef.current?.(data.signatureDataUrl, !!data.termsAccepted);
@@ -475,7 +476,7 @@ function VisionScanner({
                 setStatus('processing');
                 setPreview(imageUrl);
                 try {
-                  const scanRes = await fetch('/api/scan-id', {
+                  const scanRes = await authFetch('/api/scan-id', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ imageBase64: imageUrl }),
@@ -517,7 +518,7 @@ function VisionScanner({
     setPreview(dataUrl);
 
     try {
-      const res = await fetch('/api/scan-id', {
+      const res = await authFetch('/api/scan-id', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64: dataUrl }),

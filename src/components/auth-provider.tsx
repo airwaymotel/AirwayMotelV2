@@ -3,6 +3,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { AuthUser, Permission } from '@/lib/auth-types';
 
+const TOKEN_KEY = 'airway_session_token';
+
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
@@ -10,6 +12,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   hasPermission: (permission: Permission) => boolean;
   isSuperAdmin: boolean;
+  getToken: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -19,10 +22,21 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
   hasPermission: () => false,
   isSuperAdmin: false,
+  getToken: () => null,
 });
 
 export function useAuth() {
   return useContext(AuthContext);
+}
+
+// Helper: authenticated fetch (tab-isolated via sessionStorage)
+export function authFetch(input: string, init?: RequestInit): Promise<Response> {
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem(TOKEN_KEY) : null;
+  const headers = new Headers(init?.headers);
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return fetch(input, { ...init, headers });
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -32,12 +46,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Check session on mount + poll every 5s for real-time permission sync
   useEffect(() => {
     const checkSession = async () => {
+      const token = sessionStorage.getItem(TOKEN_KEY);
+      if (!token) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       try {
-        const res = await fetch('/api/auth/me');
+        const res = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (res.ok) {
           const data = await res.json();
           setUser(data.user);
         } else {
+          sessionStorage.removeItem(TOKEN_KEY);
           setUser(null);
         }
       } catch {
@@ -71,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: data.error || 'Login failed' };
       }
 
+      sessionStorage.setItem(TOKEN_KEY, data.token);
       setUser(data.user);
       return {};
     } catch {
@@ -79,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    sessionStorage.removeItem(TOKEN_KEY);
     await fetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
   }, []);
@@ -89,6 +114,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return user.permissions.includes(permission);
   }, [user]);
 
+  const getToken = useCallback(() => {
+    return sessionStorage.getItem(TOKEN_KEY);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -98,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         hasPermission,
         isSuperAdmin: user?.role === 'super_admin',
+        getToken,
       }}
     >
       {children}

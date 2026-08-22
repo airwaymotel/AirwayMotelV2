@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Room, Guest, Stay, Payment, ActivityLog, NavTab, MotelSettings } from './types';
 import { isSupabaseConnected } from './supabase';
+import { authFetch } from '@/components/auth-provider';
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ function mapSettingsFromDb(row: Record<string, unknown> | undefined): MotelSetti
 
 async function fetchFromApi<T>(path: string): Promise<T[] | null> {
   try {
-    const res = await fetch(path);
+    const res = await authFetch(path);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -157,7 +158,7 @@ async function fetchFromApi<T>(path: string): Promise<T[] | null> {
 
 async function postToApi<T>(path: string, body: Record<string, unknown>): Promise<T | null> {
   try {
-    const res = await fetch(path, {
+    const res = await authFetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -171,7 +172,7 @@ async function postToApi<T>(path: string, body: Record<string, unknown>): Promis
 
 async function patchApi<T>(path: string, body: Record<string, unknown>): Promise<T | null> {
   try {
-    const res = await fetch(path, {
+    const res = await authFetch(path, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -339,7 +340,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
     // Sync to Supabase
     if (isSupabaseConnected) {
       try {
-        const res = await fetch(`/api/rooms?id=${roomId}`, { method: 'DELETE' });
+        const res = await authFetch(`/api/rooms?id=${roomId}`, { method: 'DELETE' });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || 'Failed to delete room');
@@ -422,7 +423,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
 
     if (isSupabaseConnected) {
       try {
-        const res = await fetch(`/api/guests?id=${guestId}`, { method: 'DELETE' });
+        const res = await authFetch(`/api/guests?id=${guestId}`, { method: 'DELETE' });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || 'Failed to delete guest');

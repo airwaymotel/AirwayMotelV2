@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { useAuth } from '@/components/auth-provider';
+import { useAuth, authFetch } from '@/components/auth-provider';
 import { toast } from 'sonner';
 import type { OperatorActivity } from '@/lib/auth-types';
 
@@ -25,7 +25,7 @@ export default function OperatorProfile() {
 
   const fetchFreshUser = useCallback(async () => {
     try {
-      const res = await fetch('/api/auth/me');
+      const res = await authFetch('/api/auth/me');
       if (res.ok) {
         const data = await res.json();
         setFreshUser(data.user);
@@ -36,7 +36,7 @@ export default function OperatorProfile() {
   const fetchActivity = useCallback(async () => {
     if (!authUser) return;
     try {
-      const res = await fetch(`/api/admin/operators/${authUser.id}/activity?limit=50`);
+      const res = await authFetch(`/api/admin/operators/${authUser.id}/activity?limit=50`);
       if (res.ok) {
         const data = await res.json();
         setActivities(data.activities);
@@ -72,7 +72,6 @@ export default function OperatorProfile() {
 
   const totalCheckIns = activities.filter(a => a.action === 'check_in').length;
   const totalRevenue = activities.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
-  const userInitials = user.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??';
 
   return (
     <div className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
@@ -87,9 +86,11 @@ export default function OperatorProfile() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center">
-              <span className="text-2xl font-bold text-amber-500">{userInitials}</span>
-            </div>
+            <img
+              src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(user?.full_name || 'user')}`}
+              alt="avatar"
+              className="w-16 h-16 rounded-full bg-muted"
+            />
             <div>
               <p className="text-lg font-bold">{user.full_name}</p>
               <p className="text-sm text-muted-foreground">@{user.username}</p>

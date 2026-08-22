@@ -13,24 +13,28 @@ export async function POST(req: NextRequest) {
     // Local fallback without Supabase
     if (!supabase) {
       if (username === 'superadmin' && password === '1234') {
+        const token = createSessionToken('local-superadmin');
         return NextResponse.json({
+          token,
           user: {
             id: 'local-superadmin',
             username: 'superadmin',
             full_name: 'Super Admin',
             role: 'super_admin',
-            permissions: ['check_in', 'view_dashboard', 'view_rooms', 'view_guests', 'view_payments', 'download_receipts', 'download_forms'],
+            permissions: ['check_in', 'view_dashboard', 'view_rooms', 'view_guests', 'view_payments', 'download_receipts', 'download_forms', 'edit_guests', 'edit_rooms', 'manage_discounts'],
           },
         });
       }
       if (username === 'opone' && password === 'op1234') {
+        const token = createSessionToken('local-opone');
         return NextResponse.json({
+          token,
           user: {
             id: 'local-opone',
             username: 'opone',
             full_name: 'Operator One',
             role: 'operator',
-            permissions: ['check_in', 'view_dashboard', 'view_rooms', 'view_guests', 'view_payments', 'download_receipts', 'download_forms'],
+            permissions: ['check_in', 'view_dashboard', 'view_rooms', 'view_guests', 'view_payments', 'download_receipts', 'download_forms', 'edit_guests', 'edit_rooms', 'manage_discounts'],
           },
         });
       }
@@ -45,8 +49,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error || !user) {
-      console.error('[Login] Supabase query error:', error?.message, error?.code);
-      return NextResponse.json({ error: 'Invalid username or password', detail: error?.message }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
     }
 
     if (!user.is_active) {
@@ -60,7 +63,7 @@ export async function POST(req: NextRequest) {
     // Fetch permissions
     let permissions: string[];
     if (user.role === 'super_admin') {
-      permissions = ['check_in', 'view_dashboard', 'view_rooms', 'view_guests', 'view_payments', 'download_receipts', 'download_forms'];
+      permissions = ['check_in', 'view_dashboard', 'view_rooms', 'view_guests', 'view_payments', 'download_receipts', 'download_forms', 'edit_guests', 'edit_rooms', 'manage_discounts'];
     } else {
       const { data: perms } = await supabase
         .from('operator_permissions')
@@ -69,10 +72,11 @@ export async function POST(req: NextRequest) {
       permissions = (perms || []).filter(p => p.enabled).map(p => p.permission);
     }
 
-    // Create session token
+    // Create session token (returned in JSON, stored in sessionStorage by client)
     const token = createSessionToken(user.id);
 
-    const response = NextResponse.json({
+    return NextResponse.json({
+      token,
       user: {
         id: user.id,
         username: user.username,
@@ -81,20 +85,7 @@ export async function POST(req: NextRequest) {
         permissions,
       },
     });
-
-    // Set httpOnly cookie
-    response.cookies.set(SESSION_COOKIE, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 24 * 60 * 60, // 24 hours
-    });
-
-    return response;
   } catch (err) {
     return NextResponse.json({ error: 'Login failed' }, { status: 500 });
   }
 }
-
-const SESSION_COOKIE = 'airway_session';

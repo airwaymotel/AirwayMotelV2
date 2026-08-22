@@ -1,11 +1,10 @@
-import { cookies } from 'next/headers';
+import { NextRequest } from 'next/server';
 import { supabase } from './supabase';
-import type { AuthUser, Permission, UserRole, SUPER_ADMIN_PERMISSIONS } from './auth-types';
+import type { AuthUser, Permission, UserRole } from './auth-types';
 
-const SESSION_COOKIE = 'airway_session';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'airway-motel-secret-key-2024';
 
-// Simple base64 session token (no crypto needed for this use case)
+// Simple base64 session token
 export function createSessionToken(userId: string): string {
   const payload = JSON.stringify({ userId, ts: Date.now() });
   return Buffer.from(payload).toString('base64url');
@@ -14,7 +13,6 @@ export function createSessionToken(userId: string): string {
 export function parseSessionToken(token: string): { userId: string } | null {
   try {
     const payload = JSON.parse(Buffer.from(token, 'base64url').toString());
-    // Expire after 24 hours
     if (Date.now() - payload.ts > 24 * 60 * 60 * 1000) return null;
     return { userId: payload.userId };
   } catch {
@@ -22,10 +20,15 @@ export function parseSessionToken(token: string): { userId: string } | null {
   }
 }
 
-export async function getSessionUser(): Promise<AuthUser | null> {
+// Read token from Authorization header (tab-isolated, no cookies)
+export async function getSessionUser(req?: NextRequest): Promise<AuthUser | null> {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(SESSION_COOKIE)?.value;
+    let token: string | undefined;
+
+    if (req) {
+      token = req.headers.get('authorization')?.replace('Bearer ', '') || undefined;
+    }
+
     if (!token) return null;
 
     const parsed = parseSessionToken(token);
@@ -33,7 +36,6 @@ export async function getSessionUser(): Promise<AuthUser | null> {
 
     if (!supabase) return null;
 
-    // Fetch user
     const { data: user, error } = await supabase
       .from('users')
       .select('id, username, full_name, role, is_active')
@@ -42,14 +44,13 @@ export async function getSessionUser(): Promise<AuthUser | null> {
 
     if (error || !user || !user.is_active) return null;
 
-    // Fetch permissions
     const { data: perms } = await supabase
       .from('operator_permissions')
       .select('permission, enabled')
       .eq('user_id', user.id);
 
     const permissions: Permission[] = user.role === 'super_admin'
-      ? ['check_in', 'view_dashboard', 'view_rooms', 'view_guests', 'view_payments', 'download_receipts', 'download_forms']
+      ? ['check_in', 'view_dashboard', 'view_rooms', 'view_guests', 'view_payments', 'download_receipts', 'download_forms', 'edit_guests', 'edit_rooms', 'manage_discounts']
       : (perms || []).filter(p => p.enabled).map(p => p.permission as Permission);
 
     return {

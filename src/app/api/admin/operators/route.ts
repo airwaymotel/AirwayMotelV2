@@ -3,8 +3,8 @@ import { getSessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import type { OperatorWithStats } from '@/lib/auth-types';
 
-export async function GET() {
-  const user = await getSessionUser();
+export async function GET(req: NextRequest) {
+  const user = await getSessionUser(req);
   if (!user || user.role !== 'super_admin') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
@@ -62,7 +62,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getSessionUser();
+  const user = await getSessionUser(req);
   if (!user || user.role !== 'super_admin') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }

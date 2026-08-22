@@ -39,8 +39,6 @@ export default function Home() {
   const { theme, setTheme } = useTheme();
   const { user, hasPermission, isSuperAdmin } = useAuth();
   const [now, setNow] = useState<Date | null>(null);
-
-  // Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -156,8 +154,6 @@ export default function Home() {
     'guests': 'Guest History',
     'settings': 'Settings',
   };
-
-  const userInitials = user?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??';
 
   return (
     <AuthGuard>
@@ -286,9 +282,11 @@ export default function Home() {
                   onClick={() => router.push('/profile')}
                   className="hidden lg:flex items-center gap-2 hover:bg-muted rounded-lg px-2 py-1 transition-colors cursor-pointer"
                 >
-                  <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center justify-center text-[10px] font-bold">
-                    {userInitials}
-                  </div>
+                  <img
+                    src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(user?.full_name || 'user')}`}
+                    alt="avatar"
+                    className="w-7 h-7 rounded-full bg-muted"
+                  />
                   <div className="text-left">
                     <p className="text-xs font-medium leading-none">{user?.full_name}</p>
                     <p className="text-[10px] text-muted-foreground capitalize">{user?.role?.replace('_', ' ')}</p>

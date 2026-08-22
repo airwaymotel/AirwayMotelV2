@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { useAuth } from '@/components/auth-provider';
+import { useAuth, authFetch } from '@/components/auth-provider';
 import { toast } from 'sonner';
 import type { OperatorWithStats } from '@/lib/auth-types';
 
@@ -31,7 +31,7 @@ export default function SuperAdminProfile() {
 
   const fetchOperators = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/operators');
+      const res = await authFetch('/api/admin/operators');
       if (res.ok) {
         const data = await res.json();
         setOperators(data.operators);
@@ -62,7 +62,7 @@ export default function SuperAdminProfile() {
     }
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/operators', {
+      const res = await authFetch('/api/admin/operators', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: newUsername, password: newPassword, full_name: newFullName }),
@@ -109,8 +109,6 @@ export default function SuperAdminProfile() {
     }
   };
 
-  const userInitials = currentUser?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??';
-
   return (
     <div className="p-4 lg:p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -124,9 +122,11 @@ export default function SuperAdminProfile() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center">
-              <span className="text-2xl font-bold text-amber-500">{userInitials}</span>
-            </div>
+            <img
+              src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(currentUser?.full_name || 'admin')}`}
+              alt="avatar"
+              className="w-16 h-16 rounded-full bg-muted"
+            />
             <div>
               <p className="text-lg font-bold">{currentUser?.full_name}</p>
               <p className="text-sm text-muted-foreground">@{currentUser?.username}</p>

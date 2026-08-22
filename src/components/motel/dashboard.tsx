@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { DoorClosed, DoorOpen, LogOut, DollarSign } from 'lucide-react';
 import StatCard from './stat-card';
 import { useMotelStore } from '@/lib/store';
@@ -16,6 +17,7 @@ import {
 import AnimateOnScroll from '@/components/ui/animate-on-scroll';
 
 export default function Dashboard() {
+  const router = useRouter();
   const rooms = useMotelStore((s) => s.rooms);
   const guests = useMotelStore((s) => s.guests);
   const stays = useMotelStore((s) => s.stays);
@@ -55,6 +57,7 @@ export default function Dashboard() {
 
       return {
         id: stay.id,
+        guestId: stay.guestId,
         guest: guestName,
         action: stay.status === 'checked_out' ? 'Check-out' : 'Check-in',
         room: roomNumber,
@@ -144,12 +147,14 @@ export default function Dashboard() {
               <TableBody>
                 {realActivityLog.length > 0 ? (
                   realActivityLog.map((log) => (
-                    <TableRow key={log.id}>
+                    <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/guest/${log.guestId}`)}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0">
-                            {log.guest.split(' ').map((n) => n[0]).join('').substring(0, 2)}
-                          </div>
+                          <img
+                            src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(log.guest)}`}
+                            alt="avatar"
+                            className="w-7 h-7 rounded-full bg-muted shrink-0"
+                          />
                           <span className="font-medium text-sm">{log.guest}</span>
                         </div>
                       </TableCell>
@@ -193,9 +198,11 @@ export default function Dashboard() {
                     key={guest.id}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
                   >
-                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                      {guest.name.split(' ').map((n) => n[0]).join('')}
-                    </div>
+                    <img
+                      src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(guest.name)}`}
+                      alt="avatar"
+                      className="w-9 h-9 rounded-full bg-muted"
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{guest.name}</p>
                       <p className="text-xs text-muted-foreground">
