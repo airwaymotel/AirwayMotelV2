@@ -108,17 +108,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Create default permissions (all disabled)
+  // Create default permissions (all enabled except manage_discounts, edit_guests, edit_rooms)
   const permissions = [
-    'check_in', 'view_dashboard', 'view_rooms', 'view_guests',
-    'view_payments', 'download_receipts', 'download_forms',
+    { permission: 'check_in', enabled: true },
+    { permission: 'view_dashboard', enabled: true },
+    { permission: 'view_rooms', enabled: true },
+    { permission: 'view_guests', enabled: true },
+    { permission: 'view_payments', enabled: true },
+    { permission: 'download_receipts', enabled: true },
+    { permission: 'download_forms', enabled: true },
+    { permission: 'edit_guests', enabled: false },
+    { permission: 'edit_rooms', enabled: false },
+    { permission: 'manage_discounts', enabled: false },
   ];
 
   await supabase.from('operator_permissions').insert(
     permissions.map(p => ({
       user_id: newOp.id,
-      permission: p,
-      enabled: false,
+      permission: p.permission,
+      enabled: p.enabled,
     }))
   );
 
