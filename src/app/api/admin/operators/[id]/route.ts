@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import bcrypt from 'bcryptjs';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser(req);
@@ -18,7 +19,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const updateData: Record<string, unknown> = {};
   if (full_name !== undefined) updateData.full_name = full_name;
   if (is_active !== undefined) updateData.is_active = is_active;
-  if (password) updateData.password_hash = password;
+  if (password) updateData.password_hash = await bcrypt.hash(password, 10);
   updateData.updated_at = new Date().toISOString();
 
   const { error } = await supabase

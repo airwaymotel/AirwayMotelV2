@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { authFetch } from '@/components/auth-provider';
 import { useAuth } from '@/components/auth-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,52 +41,24 @@ export default function Settings() {
     setLoading(true);
 
     try {
-      if (!supabase) {
-        // Local fallback — check against stored password or default
-        const stored = localStorage.getItem('airway_password') || '1234';
-        if (currentPassword !== stored) {
-          throw new Error('Current password is incorrect');
-        }
-        localStorage.setItem('airway_password', newPassword);
-        setMessage({ type: 'success', text: 'Password updated successfully.' });
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-        setLoading(false);
-        return;
-      }
+      const res = await authFetch('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
 
-      // Verify current password against Supabase admin table
-      const { data, error: fetchError } = await supabase
-        .from('admin')
-        .select('password')
-        .limit(1)
-        .single();
+      const data = await res.json();
 
-      if (fetchError || !data) {
-        throw new Error('Could not connect to authentication server');
-      }
-
-      if (data.password !== currentPassword) {
-        throw new Error('Current password is incorrect');
-      }
-
-      // Update password
-      const { error: updateError } = await supabase
-        .from('admin')
-        .update({ password: newPassword })
-        .eq('password', currentPassword);
-
-      if (updateError) {
-        throw new Error('Failed to update password');
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update password');
       }
 
       setMessage({ type: 'success', text: 'Password updated successfully.' });
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'An error occurred' });
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      setMessage({ type: 'error', text: errorMessage });
     } finally {
       setLoading(false);
     }

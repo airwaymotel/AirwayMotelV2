@@ -1,26 +1,54 @@
 import { NextRequest } from 'next/server';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { supabase } from './supabase';
 import type { AuthUser, Permission, UserRole } from './auth-types';
 
-const SESSION_SECRET = process.env.SESSION_SECRET || 'airway-motel-secret-key-2024';
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
+  throw new Error('SESSION_SECRET environment variable is required (min 32 chars)');
+}
 
-// Simple base64 session token
+const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function sign(payload: string): string {
+  return createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+}
+
+function verify(payload: string, signature: string): boolean {
+  const expected = sign(payload);
+  try {
+    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
 export function createSessionToken(userId: string): string {
   const payload = JSON.stringify({ userId, ts: Date.now() });
-  return Buffer.from(payload).toString('base64url');
+  const signature = sign(payload);
+  return `${Buffer.from(payload).toString('base64url')}.${signature}`;
 }
 
 export function parseSessionToken(token: string): { userId: string } | null {
   try {
-    const payload = JSON.parse(Buffer.from(token, 'base64url').toString());
-    if (Date.now() - payload.ts > 24 * 60 * 60 * 1000) return null;
+    const parts = token.split('.');
+    if (parts.length !== 2) return null;
+
+    const payloadB64 = parts[0];
+    const signature = parts[1];
+    const payloadStr = Buffer.from(payloadB64, 'base64url').toString();
+
+    if (!verify(payloadStr, signature)) return null;
+
+    const payload = JSON.parse(payloadStr);
+    if (Date.now() - payload.ts > TOKEN_EXPIRY_MS) return null;
+
     return { userId: payload.userId };
   } catch {
     return null;
   }
 }
 
-// Read token from Authorization header (tab-isolated, no cookies)
 export async function getSessionUser(req?: NextRequest): Promise<AuthUser | null> {
   try {
     let token: string | undefined;

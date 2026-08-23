@@ -1,48 +1,66 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getSessionUser, hasPermission } from '@/lib/auth';
 
-export async function GET() {
-  if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
+export async function GET(req: NextRequest) {
+  const user = await getSessionUser(req);
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!hasPermission(user, 'view_rooms')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!supabase) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 });
 
   const { data, error } = await supabase
     .from('rooms')
     .select('*')
     .order('room_number', { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: 'Failed to fetch rooms' }, { status: 500 });
   return NextResponse.json(data);
 }
 
-export async function POST(request: Request) {
-  if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
+export async function POST(req: NextRequest) {
+  const user = await getSessionUser(req);
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!hasPermission(user, 'edit_rooms')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!supabase) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 });
 
-  const body = await request.json();
-  const { data, error } = await supabase.from('rooms').insert(body).select().single();
+  const body = await req.json();
+  const allowed = { room_number: body.room_number, bed_count: body.bed_count, status: body.status, rate_per_night: body.rate_per_night };
+  const { data, error } = await supabase.from('rooms').insert(allowed).select().single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: 'Failed to create room' }, { status: 500 });
   return NextResponse.json(data, { status: 201 });
 }
 
-export async function PATCH(request: Request) {
-  if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
+export async function PATCH(req: NextRequest) {
+  const user = await getSessionUser(req);
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!hasPermission(user, 'edit_rooms')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!supabase) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 });
 
-  const { id, ...updates } = await request.json();
-  const { data, error } = await supabase.from('rooms').update(updates).eq('id', id).select().single();
+  const { id, ...updates } = await req.json();
+  if (!id) return NextResponse.json({ error: 'Room ID is required' }, { status: 400 });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const allowed: Record<string, unknown> = {};
+  for (const key of ['room_number', 'bed_count', 'status', 'rate_per_night']) {
+    if (key in updates) allowed[key] = updates[key];
+  }
+
+  const { data, error } = await supabase.from('rooms').update(allowed).eq('id', id).select().single();
+  if (error) return NextResponse.json({ error: 'Failed to update room' }, { status: 500 });
   return NextResponse.json(data);
 }
 
-export async function DELETE(request: Request) {
-  if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
+export async function DELETE(req: NextRequest) {
+  const user = await getSessionUser(req);
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!hasPermission(user, 'edit_rooms')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!supabase) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 });
 
-  const { searchParams } = new URL(request.url);
+  const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
-
   if (!id) return NextResponse.json({ error: 'Room ID is required' }, { status: 400 });
 
   const { error } = await supabase.from('rooms').delete().eq('id', id);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: 'Failed to delete room' }, { status: 500 });
   return NextResponse.json({ success: true });
 }

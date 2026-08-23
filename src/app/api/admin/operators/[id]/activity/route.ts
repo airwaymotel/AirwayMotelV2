@@ -14,7 +14,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   const url = new URL(req.url);
-  const limit = parseInt(url.searchParams.get('limit') || '50');
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50') || 50, 1), 100);
 
   const { data: activities, error } = await supabase
     .from('operator_activity')
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     .limit(limit);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch activity' }, { status: 500 });
   }
 
   // Enrich with guest names and room numbers

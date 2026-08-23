@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import type { OperatorWithStats } from '@/lib/auth-types';
+import bcrypt from 'bcryptjs';
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser(req);
@@ -89,11 +90,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Create operator
+  const hashedPassword = await bcrypt.hash(password, 10);
+
   const { data: newOp, error } = await supabase
     .from('users')
     .insert({
       username,
-      password_hash: password,
+      password_hash: hashedPassword,
       full_name,
       role: 'operator',
       is_active: true,
