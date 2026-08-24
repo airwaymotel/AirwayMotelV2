@@ -149,9 +149,14 @@ function mapSettingsFromDb(row: Record<string, unknown> | undefined): MotelSetti
 async function fetchFromApi<T>(path: string): Promise<T[] | null> {
   try {
     const res = await authFetch(path);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error(`[API ${path}] ${res.status}:`, err);
+      return null;
+    }
     return await res.json();
-  } catch {
+  } catch (e) {
+    console.error(`[API ${path}] Network error:`, e);
     return null;
   }
 }
@@ -163,9 +168,14 @@ async function postToApi<T>(path: string, body: Record<string, unknown>): Promis
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error(`[API ${path}] ${res.status}:`, err);
+      return null;
+    }
     return await res.json();
-  } catch {
+  } catch (e) {
+    console.error(`[API ${path}] Network error:`, e);
     return null;
   }
 }
