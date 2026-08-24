@@ -1,4 +1,4 @@
--- Reset all guest/stay data but keep users, permissions, and settings
+-- Reset all data but keep users, permissions, and settings
 -- Run this in Supabase SQL Editor
 
 DELETE FROM operator_activity;
@@ -7,9 +7,7 @@ DELETE FROM payments;
 DELETE FROM stays;
 DELETE FROM guests;
 DELETE FROM scan_sessions;
-
--- Reset room status back to available
-UPDATE rooms SET status = 'available';
+DELETE FROM rooms;
 
 -- Reset auto-increment IDs (optional, keeps sequences clean)
 -- Uncomment if needed:
