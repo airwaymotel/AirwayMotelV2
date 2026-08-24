@@ -25,8 +25,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const allowed = {
-    stay_id: body.stay_id, amount: body.amount, method: body.method,
-    notes: body.notes, processed_by: body.processed_by,
+    stay_id: body.stay_id, amount: body.amount, method: body.method, notes: body.notes,
   };
   const { data, error } = await supabase.from('payments').insert(allowed).select().single();
 

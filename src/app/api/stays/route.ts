@@ -25,10 +25,10 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const allowed = {
-    guest_id: body.guest_id, room_id: body.room_id, check_in_date: body.check_in_date,
-    check_out_date: body.check_out_date, rate_per_night: body.rate_per_night,
-    total_amount: body.total_amount, status: body.status, notes: body.notes,
-    weekly_discount: body.weekly_discount, weekly_discount_amount: body.weekly_discount_amount,
+    guest_id: body.guest_id, room_id: body.room_id, rate_type: body.rate_type,
+    rate_amount: body.rate_amount, check_in_date: body.check_in_date,
+    check_in_time: body.check_in_time, check_out_date: body.check_out_date,
+    check_out_time: body.check_out_time, status: body.status,
   };
   const { data, error } = await supabase.from('stays').insert(allowed).select().single();
 
@@ -46,7 +46,7 @@ export async function PATCH(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Stay ID is required' }, { status: 400 });
 
   const allowed: Record<string, unknown> = {};
-  for (const key of ['check_in_date', 'check_out_date', 'rate_per_night', 'total_amount', 'status', 'notes', 'weekly_discount', 'weekly_discount_amount']) {
+  for (const key of ['guest_id', 'room_id', 'rate_type', 'rate_amount', 'check_in_date', 'check_in_time', 'check_out_date', 'check_out_time', 'status']) {
     if (key in updates) allowed[key] = updates[key];
   }
 

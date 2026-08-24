@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (!supabase) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 });
 
   const body = await req.json();
-  const allowed = { room_number: body.room_number, bed_count: body.bed_count, status: body.status, rate_per_night: body.rate_per_night };
+  const allowed = { room_number: body.room_number, type: body.type, status: body.status };
   const { data, error } = await supabase.from('rooms').insert(allowed).select().single();
 
   if (error) return NextResponse.json({ error: 'Failed to create room' }, { status: 500 });
@@ -41,7 +41,7 @@ export async function PATCH(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Room ID is required' }, { status: 400 });
 
   const allowed: Record<string, unknown> = {};
-  for (const key of ['room_number', 'bed_count', 'status', 'rate_per_night']) {
+  for (const key of ['room_number', 'type', 'status']) {
     if (key in updates) allowed[key] = updates[key];
   }
 

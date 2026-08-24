@@ -26,9 +26,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const allowed = {
     first_name: body.first_name, last_name: body.last_name, phone: body.phone,
-    email: body.email, id_type: body.id_type, id_number: body.id_number,
-    address: body.address, city: body.city, state: body.state, zip_code: body.zip_code,
-    date_of_birth: body.date_of_birth, gender: body.gender,
+    email: body.email, id_number: body.id_number, date_of_birth: body.date_of_birth,
+    id_photo_url: body.id_photo_url, id_type: body.id_type, id_state: body.id_state,
   };
   const { data, error } = await supabase.from('guests').insert(allowed).select().single();
 
@@ -46,7 +45,7 @@ export async function PATCH(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Guest ID is required' }, { status: 400 });
 
   const allowed: Record<string, unknown> = {};
-  for (const key of ['first_name', 'last_name', 'phone', 'email', 'id_type', 'id_number', 'address', 'city', 'state', 'zip_code', 'date_of_birth', 'gender']) {
+  for (const key of ['first_name', 'last_name', 'phone', 'email', 'id_number', 'date_of_birth', 'id_photo_url', 'id_type', 'id_state']) {
     if (key in updates) allowed[key] = updates[key];
   }
 
