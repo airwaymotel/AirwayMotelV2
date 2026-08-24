@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (!supabase) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 });
 
   const body = await req.json();
-  const allowed = { room_number: body.room_number, type: body.type, status: body.status };
+  const allowed = { room_number: body.room_number, type: body.type, status: body.status, floor: body.floor ?? 1 };
   const { data, error } = await supabase.from('rooms').insert(allowed).select().single();
 
   if (error) return NextResponse.json({ error: 'Failed to create room' }, { status: 500 });

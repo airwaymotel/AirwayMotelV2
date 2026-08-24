@@ -27,8 +27,10 @@ export async function POST(req: NextRequest) {
   const allowed = {
     guest_id: body.guest_id, room_id: body.room_id, rate_type: body.rate_type,
     rate_amount: body.rate_amount, check_in_date: body.check_in_date,
-    check_in_time: body.check_in_time, check_out_date: body.check_out_date,
-    check_out_time: body.check_out_time, status: body.status,
+    check_in_time: body.check_in_time,
+    check_out_date: body.check_out_date || null,
+    check_out_time: body.check_out_time || null,
+    status: body.status,
   };
   const { data, error } = await supabase.from('stays').insert(allowed).select().single();
 
