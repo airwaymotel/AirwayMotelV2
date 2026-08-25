@@ -20,7 +20,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: '/(.*)',
+        source: '/scan/(.*)',
+        headers: securityHeaders.filter(h => h.key !== 'Permissions-Policy'),
+      },
+      {
+        source: '/((?!scan/).*)',
         headers: securityHeaders,
       },
     ];
