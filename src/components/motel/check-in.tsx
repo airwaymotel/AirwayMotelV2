@@ -198,6 +198,107 @@ function PhoneSignaturePanel({
   );
 }
 
+// ── Free-form time picker ─────────────────────────────────
+// Renders as [hh]:[mm] [AM/PM] so the admin can type any time
+// and flip the period with one click. Keeps the value as a
+// "h:mm AM/PM" string to match the rest of the app.
+
+function parseTimeValue(value: string): { hh: string; mm: string; period: 'AM' | 'PM' } {
+  const withPeriod = value.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP]M)$/i);
+  if (withPeriod) {
+    return {
+      hh: String(Number(withPeriod[1])).padStart(2, '0'),
+      mm: withPeriod[2],
+      period: withPeriod[3].toUpperCase() as 'AM' | 'PM',
+    };
+  }
+  const h24 = value.match(/^(\d{1,2}):(\d{2})/);
+  if (h24) {
+    const h = Number(h24[1]);
+    const period: 'AM' | 'PM' = h >= 12 && h < 24 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return { hh: String(h12).padStart(2, '0'), mm: h24[2], period };
+  }
+  return { hh: '12', mm: '00', period: 'PM' };
+}
+
+function TimePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const initial = parseTimeValue(value);
+  const [hh, setHh] = useState(initial.hh);
+  const [mm, setMm] = useState(initial.mm);
+  const [period, setPeriod] = useState<'AM' | 'PM'>(initial.period);
+
+  const commit = (h: string, m: string, p: 'AM' | 'PM') => {
+    const hNum = Number(h);
+    const mNum = Number(m);
+    if (!h || !m || Number.isNaN(hNum) || Number.isNaN(mNum)) return;
+    if (hNum < 1 || hNum > 12 || mNum < 0 || mNum > 59) return;
+    onChange(`${hNum}:${m.padStart(2, '0')} ${p}`);
+  };
+
+  const handleHour = (raw: string) => {
+    const digits = raw.replace(/\D/g, '').slice(0, 2);
+    setHh(digits);
+    if (digits.length > 0) commit(digits, mm, period);
+  };
+
+  const handleMinute = (raw: string) => {
+    const digits = raw.replace(/\D/g, '').slice(0, 2);
+    setMm(digits);
+    if (digits.length === 2) commit(hh, digits, period);
+  };
+
+  const handleBlur = (field: 'hh' | 'mm') => {
+    if (field === 'hh') {
+      const padded = hh ? String(Number(hh)).padStart(2, '0') : '12';
+      const safe = Number(padded) >= 1 && Number(padded) <= 12 ? padded : '12';
+      setHh(safe);
+      commit(safe, mm, period);
+    } else {
+      const padded = mm.length === 1 ? `0${mm}` : mm || '00';
+      const safe = Number(padded) <= 59 ? padded : '00';
+      setMm(safe);
+      commit(hh, safe, period);
+    }
+  };
+
+  const togglePeriod = () => {
+    const next = period === 'AM' ? 'PM' : 'AM';
+    setPeriod(next);
+    commit(hh, mm, next);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input
+        value={hh}
+        onChange={(e) => handleHour(e.target.value)}
+        onBlur={() => handleBlur('hh')}
+        inputMode="numeric"
+        aria-label="Hour"
+        className="w-14 px-1 text-center font-mono"
+      />
+      <span className="text-lg font-semibold text-muted-foreground leading-none">:</span>
+      <Input
+        value={mm}
+        onChange={(e) => handleMinute(e.target.value)}
+        onBlur={() => handleBlur('mm')}
+        inputMode="numeric"
+        aria-label="Minute"
+        className="w-14 px-1 text-center font-mono"
+      />
+      <button
+        type="button"
+        onClick={togglePeriod}
+        aria-label={`Switch to ${period === 'AM' ? 'PM' : 'AM'}`}
+        className="h-9 w-14 rounded-md border border-input bg-transparent text-sm font-semibold tracking-wide shadow-xs transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none cursor-pointer"
+      >
+        {period}
+      </button>
+    </div>
+  );
+}
+
 export default function CheckIn() {
 const STEPS = [
   'Room',
@@ -278,6 +379,10 @@ const STEPS = [
   const [applyWeeklyDiscount, setApplyWeeklyDiscount] = useState(false);
   const [weeklyDiscountInput, setWeeklyDiscountInput] = useState(motelSettings.weeklyDiscountAmount.toString());
 
+  // Seasonal rate override — admin enters the per-night amount at check-in.
+  // null = use the room's default rate.
+  const [rateOverride, setRateOverride] = useState<string | null>(null);
+
   // Phone signature flow
   const [showPhoneSignature, setShowPhoneSignature] = useState(false);
   const [phoneSigSessionId, setPhoneSigSessionId] = useState('');
@@ -293,7 +398,9 @@ const STEPS = [
   );
   const selectedRoom = rooms.find((r) => r.id === selectedRoomId);
   const defaultRate = roomType === '1-bed' ? motelSettings.oneBedRate : motelSettings.twoBedRate;
-  const rate = selectedRoom?.rate ?? defaultRate;
+  const rate = rateOverride !== null
+    ? Math.max(0, Number(rateOverride) || 0)
+    : (selectedRoom?.rate ?? defaultRate);
 
   const checkInDateObj = checkInDate ? new Date(checkInDate + 'T00:00:00') : null;
   const checkOutDateObj = checkOutDate ? new Date(checkOutDate + 'T00:00:00') : null;
@@ -658,6 +765,7 @@ const STEPS = [
     setSubmitting(false);
     setApplyVat(false);
     setApplyWeeklyDiscount(false);
+    setRateOverride(null);
     // Reset returning customer state
     setIsReturningCustomer(false);
     setShowReturningSelector(false);
@@ -1069,14 +1177,7 @@ const STEPS = [
                 </div>
                 <div>
                   <Label className="mb-1.5 block">Check-in Time</Label>
-                  <Select value={checkInTime} onValueChange={setCheckInTime}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {['12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'].map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <TimePicker value={checkInTime} onChange={setCheckInTime} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -1185,9 +1286,25 @@ const STEPS = [
               <Separator />
 
                <div className="space-y-2">
-                 <div className="flex justify-between text-sm">
+                 <div className="flex justify-between text-sm items-center">
                    <span>Room ({roomType === '1-bed' ? '1-Bed King' : '2-Bed Queen'})</span>
-                   <span className="font-medium">${rate} × {nights}</span>
+                   <span className="flex items-center gap-1.5">
+                     <span className="text-muted-foreground">$</span>
+                     <Input
+                       type="number"
+                       min="0"
+                       step="1"
+                       value={rateOverride ?? String(selectedRoom?.rate ?? defaultRate)}
+                       onChange={(e) => setRateOverride(e.target.value)}
+                       onBlur={() => {
+                         if (rateOverride !== null && rateOverride.trim() === '') setRateOverride(null);
+                       }}
+                       placeholder={String(defaultRate)}
+                       aria-label="Rate per night"
+                       className="w-24 h-8 text-sm text-right"
+                     />
+                     <span className="text-muted-foreground text-xs">× {nights} night{nights > 1 ? 's' : ''}</span>
+                   </span>
                  </div>
                  <div className="flex justify-between text-sm">
                    <span>Subtotal</span>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { DoorClosed, DoorOpen, LogOut, DollarSign } from 'lucide-react';
+import { DoorClosed, DoorOpen, LogOut } from 'lucide-react';
 import StatCard from './stat-card';
 import { useMotelStore } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,14 +22,12 @@ export default function Dashboard() {
   const guests = useMotelStore((s) => s.guests);
   const stays = useMotelStore((s) => s.stays);
   const getActiveStays = useMotelStore((s) => s.getActiveStays);
-  const getTodayRevenue = useMotelStore((s) => s.getTodayRevenue);
 
   const occupied = rooms.filter((r) => r.status === 'occupied').length;
   const available = rooms.filter((r) => r.status === 'available').length;
   const total = rooms.length || 1;
   const occPercent = Math.round((occupied / total) * 100);
   const availPercent = Math.round((available / total) * 100);
-  const revenue = getTodayRevenue();
 
   const activeStays = getActiveStays();
   const today = new Date().toISOString().split('T')[0];
@@ -86,7 +84,7 @@ export default function Dashboard() {
       </AnimateOnScroll>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <AnimateOnScroll delay={0}>
           <StatCard
             title="Rooms Occupied"
@@ -112,15 +110,6 @@ export default function Dashboard() {
             badgeText="Due 10 AM"
             icon={LogOut}
             tone="destructive"
-          />
-        </AnimateOnScroll>
-        <AnimateOnScroll delay={300}>
-          <StatCard
-            title="Today's Revenue"
-            value={`$${Math.round(revenue).toLocaleString()}`}
-            badgeText="+12% vs yest"
-            icon={DollarSign}
-            isInverse
           />
         </AnimateOnScroll>
       </div>

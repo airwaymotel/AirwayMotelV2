@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Timer, LogIn, LogOut, User, Receipt, KeyRound, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,21 +27,23 @@ export default function Checkout() {
   const selectedStay = activeStays.find((s) => s.id === selectedStayId);
 
   // Calculate late fee: $10/hour after 10 AM checkout
-  const lateFee = useMemo(() => {
-    if (!selectedStay) return 0;
-    const checkoutDateTime = new Date(`${selectedStay.checkOutDate}T${selectedStay.checkOutTime}`);
-    const now = new Date();
-    if (now <= checkoutDateTime) return 0;
-    const hoursLate = Math.ceil((now.getTime() - checkoutDateTime.getTime()) / (1000 * 60 * 60));
-    return hoursLate * 10;
-  }, [selectedStay]);
+  // NOTE: Late fee temporarily disabled — uncomment below and restore
+  // `import { useState, useMemo } from 'react';` to re-enable.
+  // const lateFee = useMemo(() => {
+  //   if (!selectedStay) return 0;
+  //   const checkoutDateTime = new Date(`${selectedStay.checkOutDate}T${selectedStay.checkOutTime}`);
+  //   const now = new Date();
+  //   if (now <= checkoutDateTime) return 0;
+  //   const hoursLate = Math.ceil((now.getTime() - checkoutDateTime.getTime()) / (1000 * 60 * 60));
+  //   return hoursLate * 10;
+  // }, [selectedStay]);
+  const lateFee = 0;
 
   const totalPaid = selectedStay
     ? selectedStay.payments.reduce((sum, p) => sum + p.amount, 0)
     : 0;
 
-  const serviceFees = 15.5;
-  const totalAmount = selectedStay ? totalPaid + serviceFees + lateFee : 0;
+  const totalAmount = selectedStay ? totalPaid + lateFee : 0;
 
   const handleCheckout = async () => {
     if (!selectedStay) return;
@@ -177,7 +179,7 @@ export default function Checkout() {
               </CardContent>
             </Card>
 
-            {/* Late Fee */}
+            {/* Operational Adjustments (Late Fee) — temporarily disabled
             <Card className="md:col-span-2">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between mb-3">
@@ -206,6 +208,7 @@ export default function Checkout() {
                 </div>
               </CardContent>
             </Card>
+            */}
           </div>
         </div>
 
@@ -222,10 +225,6 @@ export default function Checkout() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm opacity-80">Room Charges</span>
                     <span className="text-sm font-bold">${totalPaid.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm opacity-80">Service Fees</span>
-                    <span className="text-sm font-bold">${serviceFees.toFixed(2)}</span>
                   </div>
                   {lateFee > 0 && (
                     <div className="flex justify-between items-center">
