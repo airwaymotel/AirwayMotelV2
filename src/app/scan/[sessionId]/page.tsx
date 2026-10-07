@@ -9,6 +9,7 @@ import {
 import SignatureCanvas from 'react-signature-canvas';
 import { supabase } from '@/lib/supabase';
 import { authFetch } from '@/components/auth-provider';
+import { useMotelStore } from '@/lib/store';
 
 const TERMS_HEADER =
   'By signing below, as a guest of AIRWAY MOTEL, you state that you have fully read the statements and conditions below and agree to abide by them, without exception, while staying at AIRWAY MOTEL.';
@@ -54,6 +55,9 @@ export default function MobileScanPage() {
 
   // Detect admin flow: if the session was created by VisionScanner on this device
   const isAdminFlow = typeof window !== 'undefined' && localStorage.getItem('airway_scan_session') === sessionId;
+  // After submit in the admin flow the result waits in localStorage for the
+  // New Check-In wizard to pick up (isAdminFlow flips false once the session key is cleared).
+  const hasPendingResult = typeof window !== 'undefined' && !!localStorage.getItem('airway_scan_result');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -490,10 +494,17 @@ export default function MobileScanPage() {
           <CheckCircle className="w-20 h-20 text-amber-500 mb-4" />
           <h2 className="text-xl font-bold mb-6">Everything is done</h2>
           <button
-            onClick={() => router.push('/')}
+            onClick={() => {
+              // Admin flow: jump straight back into the New Check-In wizard —
+              // it restores the scan result and lands on Guest Details (step 3).
+              if (typeof window !== 'undefined' && localStorage.getItem('airway_scan_result')) {
+                useMotelStore.getState().setActiveTab('check-in');
+              }
+              router.push('/');
+            }}
             className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-lg transition-colors"
           >
-            Close
+            {hasPendingResult ? 'Continue Check-In' : 'Close'}
           </button>
         </div>
       )}
