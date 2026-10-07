@@ -6,7 +6,7 @@ import {
   Search, RotateCcw, User, Phone, Mail, Calendar,
   CreditCard, Shield, FileText, ArrowRight, BedSingle, BedDouble,
   ImageIcon, PenLine, Plus, Trash2, Pencil, Check, X, Loader2,
-  Settings,
+  Settings, CalendarPlus,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -46,6 +46,8 @@ export default function Rooms() {
   const updateRoomStatus = useMotelStore((s) => s.updateRoomStatus);
   const updateRoom = useMotelStore((s) => s.updateRoom);
   const deleteRoom = useMotelStore((s) => s.deleteRoom);
+  const updateStay = useMotelStore((s) => s.updateStay);
+  const addPayment = useMotelStore((s) => s.addPayment);
   const motelSettings = useMotelStore((s) => s.motelSettings);
   const updateMotelSettings = useMotelStore((s) => s.updateMotelSettings);
 
@@ -73,6 +75,12 @@ export default function Rooms() {
 
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
+
+  // Extend stay
+  const [showExtend, setShowExtend] = useState(false);
+  const [extendDate, setExtendDate] = useState('');
+  const [extendMethod, setExtendMethod] = useState<'cash' | 'card'>('cash');
+  const [extending, setExtending] = useState(false);
 
   // Settings modal
   const [showSettings, setShowSettings] = useState(false);
@@ -106,6 +114,44 @@ export default function Rooms() {
   };
 
   const activeStay = selectedRoom ? getActiveStayForRoom(selectedRoom.id) : undefined;
+
+  // Extend stay: extra nights & cost based on the stay's own per-night rate
+  const extraNights = (() => {
+    if (!activeStay || !extendDate) return 0;
+    const current = new Date(`${activeStay.checkOutDate}T00:00:00`).getTime();
+    const next = new Date(`${extendDate}T00:00:00`).getTime();
+    if (Number.isNaN(current) || Number.isNaN(next)) return 0;
+    const diff = Math.round((next - current) / 86400000);
+    return diff > 0 ? diff : 0;
+  })();
+  const extensionCost = extraNights * (activeStay?.rateAmount ?? 0);
+
+  const handleExtendStay = async () => {
+    if (!activeStay) return;
+    if (extraNights <= 0) {
+      toast.error(`New check-out date must be after ${activeStay.checkOutDate}.`);
+      return;
+    }
+    setExtending(true);
+    try {
+      await updateStay(activeStay.id, { checkOutDate: extendDate });
+      await addPayment({
+        stayId: activeStay.id,
+        amount: extensionCost,
+        method: extendMethod,
+        description: `Stay extension (+${extraNights} night${extraNights > 1 ? 's' : ''} @ $${activeStay.rateAmount}/night)`,
+      });
+      toast.success(
+        `Stay extended by ${extraNights} night${extraNights > 1 ? 's' : ''} — $${extensionCost.toFixed(2)} added to billing.`
+      );
+      setShowExtend(false);
+      setExtendDate('');
+    } catch {
+      toast.error('Failed to extend stay.');
+    } finally {
+      setExtending(false);
+    }
+  };
 
   // ── Add Room Handler ──
   const handleAddRoom = async () => {
@@ -274,7 +320,7 @@ export default function Rooms() {
                   key={room.id}
                   room={room}
                   activeStay={getActiveStayForRoom(room.id)}
-                  onClick={() => { setSelectedRoom(room); setEditing(false); }}
+                  onClick={() => { setSelectedRoom(room); setEditing(false); setShowExtend(false); setExtendDate(''); }}
                 />
               ))}
             </div>
@@ -554,6 +600,111 @@ export default function Rooms() {
                       )}
 
                       <Separator className="my-2" />
+
+                      {/* Extend Stay */}
+                      {!showExtend ? (
+                        <Button
+                          variant="outline"
+                          className="w-full h-11 text-sm"
+                          onClick={() => { setShowExtend(true); setExtendDate(''); setExtendMethod('cash'); }}
+                        >
+                          <CalendarPlus className="w-4 h-4 mr-2" />
+                          Extend Stay
+                        </Button>
+                      ) : (
+                        <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider flex items-center gap-1.5">
+                              <CalendarPlus className="w-3.5 h-3.5" /> Extend Stay
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => { setShowExtend(false); setExtendDate(''); }}
+                              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                              aria-label="Close"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">New Check-out Date</Label>
+                            <p className="text-[11px] text-muted-foreground">Currently scheduled: {activeStay.checkOutDate}</p>
+                            <Input
+                              type="date"
+                              value={extendDate}
+                              min={activeStay.checkOutDate}
+                              onChange={(e) => setExtendDate(e.target.value)}
+                            />
+                          </div>
+
+                          {extendDate && extraNights > 0 && (
+                            <div className="rounded-md border border-border bg-background p-3 space-y-1.5">
+                              <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">Extra nights</span>
+                                <span className="font-medium">{extraNights}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground">Rate</span>
+                                <span className="font-medium">${activeStay.rateAmount}/night</span>
+                              </div>
+                              <Separator className="my-1" />
+                              <div className="flex justify-between text-sm font-semibold">
+                                <span>Extra Charges</span>
+                                <span>${extensionCost.toFixed(2)}</span>
+                              </div>
+                            </div>
+                          )}
+                          {extendDate && extraNights <= 0 && (
+                            <p className="text-xs text-destructive">
+                              New check-out date must be after {activeStay.checkOutDate}.
+                            </p>
+                          )}
+
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Payment Method</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {(['cash', 'card'] as const).map((m) => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => setExtendMethod(m)}
+                                  className={`h-8 rounded-md border text-xs font-medium capitalize transition-colors cursor-pointer ${
+                                    extendMethod === m
+                                      ? 'border-primary bg-primary/5 text-foreground'
+                                      : 'border-border hover:border-primary/40'
+                                  }`}
+                                >
+                                  {m}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              className="flex-1 h-9 text-xs"
+                              onClick={() => { setShowExtend(false); setExtendDate(''); }}
+                              disabled={extending}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              className="flex-1 h-9 text-xs"
+                              onClick={handleExtendStay}
+                              disabled={extending || extraNights <= 0}
+                            >
+                              {extending ? (
+                                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5 mr-1.5" />
+                              )}
+                              Confirm Extension
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* View Details Button */}
                       <Button

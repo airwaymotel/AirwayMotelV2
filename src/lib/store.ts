@@ -228,6 +228,10 @@ interface MotelStore {
   // Stay operations
   addStay: (stay: Omit<Stay, 'id' | 'createdAt'>) => Promise<string>;
   checkoutStay: (stayId: string) => void;
+  updateStay: (
+    stayId: string,
+    updates: Partial<Pick<Stay, 'checkInDate' | 'checkInTime' | 'checkOutDate' | 'checkOutTime' | 'rateAmount' | 'status'>>
+  ) => Promise<void>;
 
   // Payment operations
   addPayment: (payment: Omit<Payment, 'id' | 'paidAt'>) => Promise<void>;
@@ -493,6 +497,24 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
     if (isSupabaseConnected) {
       patchApi('/api/stays', { id: stayId, status: 'checked_out', actual_check_out: new Date().toISOString() });
       patchApi('/api/rooms', { id: stay.roomId, status: 'cleaning' });
+    }
+  },
+
+  updateStay: async (stayId, updates) => {
+    set((state) => ({
+      stays: state.stays.map((s) => (s.id === stayId ? { ...s, ...updates } : s)),
+    }));
+
+    // Sync to Supabase (API whitelists snake_case keys)
+    if (isSupabaseConnected) {
+      const body: Record<string, unknown> = { id: stayId };
+      if (updates.checkInDate !== undefined) body.check_in_date = updates.checkInDate;
+      if (updates.checkInTime !== undefined) body.check_in_time = updates.checkInTime;
+      if (updates.checkOutDate !== undefined) body.check_out_date = updates.checkOutDate;
+      if (updates.checkOutTime !== undefined) body.check_out_time = updates.checkOutTime;
+      if (updates.rateAmount !== undefined) body.rate_amount = updates.rateAmount;
+      if (updates.status !== undefined) body.status = updates.status;
+      await patchApi('/api/stays', body);
     }
   },
 
