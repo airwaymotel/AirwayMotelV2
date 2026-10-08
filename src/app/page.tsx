@@ -12,6 +12,7 @@ import CheckIn from '@/components/motel/check-in';
 import Checkout from '@/components/motel/checkout';
 import Guests from '@/components/motel/guests';
 import Settings from '@/components/motel/settings';
+import InitialsAvatar from '@/components/ui/initials-avatar';
 import AuthGuard from '@/components/auth-guard';
 import { useAuth } from '@/components/auth-provider';
 import { Input } from '@/components/ui/input';
@@ -282,10 +283,9 @@ export default function Home() {
                   onClick={() => router.push('/profile')}
                   className="hidden lg:flex items-center gap-2 hover:bg-muted rounded-lg px-2 py-1 transition-colors cursor-pointer"
                 >
-                  <img
-                    src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(user?.full_name || 'user')}`}
-                    alt="avatar"
-                    className="w-7 h-7 rounded-full bg-muted"
+                  <InitialsAvatar
+                    name={user?.full_name || 'User'}
+                    className="w-7 h-7"
                   />
                   <div className="text-left">
                     <p className="text-xs font-medium leading-none">{user?.full_name}</p>

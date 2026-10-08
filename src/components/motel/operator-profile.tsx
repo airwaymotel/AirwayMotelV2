@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import InitialsAvatar from '@/components/ui/initials-avatar';
 import { useAuth, authFetch } from '@/components/auth-provider';
 import { toast } from 'sonner';
 import type { OperatorActivity } from '@/lib/auth-types';
@@ -86,10 +87,9 @@ export default function OperatorProfile() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-4">
-            <img
-              src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(user?.full_name || 'user')}`}
-              alt="avatar"
-              className="w-16 h-16 rounded-full bg-muted"
+            <InitialsAvatar
+              name={user?.full_name || 'User'}
+              className="w-16 h-16"
             />
             <div>
               <p className="text-lg font-bold">{user.full_name}</p>

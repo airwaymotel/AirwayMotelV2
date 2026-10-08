@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import InitialsAvatar from '@/components/ui/initials-avatar';
 import { useAuth, authFetch } from '@/components/auth-provider';
 import AuthGuard from '@/components/auth-guard';
 import { toast } from 'sonner';
@@ -201,10 +202,9 @@ export default function OperatorDetailPage({ params }: { params: Promise<{ id: s
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <img
-                  src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(operator.full_name)}`}
-                  alt="avatar"
-                  className="w-16 h-16 rounded-full bg-muted"
+                <InitialsAvatar
+                  name={operator.full_name}
+                  className="w-16 h-16"
                 />
                 <div>
                   <p className="text-lg font-bold">{operator.full_name}</p>

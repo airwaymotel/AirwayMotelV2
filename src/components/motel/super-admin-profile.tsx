@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import InitialsAvatar from '@/components/ui/initials-avatar';
 import { useAuth, authFetch } from '@/components/auth-provider';
 import { toast } from 'sonner';
 import type { OperatorWithStats } from '@/lib/auth-types';
@@ -122,10 +123,9 @@ export default function SuperAdminProfile() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-4">
-            <img
-              src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(currentUser?.full_name || 'admin')}`}
-              alt="avatar"
-              className="w-16 h-16 rounded-full bg-muted"
+            <InitialsAvatar
+              name={currentUser?.full_name || 'Admin'}
+              className="w-16 h-16"
             />
             <div>
               <p className="text-lg font-bold">{currentUser?.full_name}</p>

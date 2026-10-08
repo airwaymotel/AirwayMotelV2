@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Printer, Users, Clock, Repeat, Search, Receipt, Trash2, Loader2, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Printer, Search, Receipt, Trash2, Loader2, Copy, ChevronLeft, ChevronRight, CalendarPlus, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,7 @@ import { useMotelStore } from '@/lib/store';
 import { useAuth } from '@/components/auth-provider';
 import { toast } from 'sonner';
 import AnimateOnScroll from '@/components/ui/animate-on-scroll';
+import InitialsAvatar from '@/components/ui/initials-avatar';
 import type { Guest } from '@/lib/types';
 
 export default function Guests() {
@@ -34,6 +35,8 @@ export default function Guests() {
   const payments = useMotelStore((s) => s.payments);
   const deleteGuest = useMotelStore((s) => s.deleteGuest);
   const updateGuest = useMotelStore((s) => s.updateGuest);
+  const updateStay = useMotelStore((s) => s.updateStay);
+  const addPayment = useMotelStore((s) => s.addPayment);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roomTypeFilter, setRoomTypeFilter] = useState('All Types');
@@ -51,6 +54,12 @@ export default function Guests() {
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', phone: '', email: '', idNumber: '', dateOfBirth: '', idType: '', idState: '' });
   const [saving, setSaving] = useState(false);
+
+  // Extend stay dialog state
+  const [extendRow, setExtendRow] = useState<{ stayId: string; name: string; room: string; checkOutDate: string } | null>(null);
+  const [extendDate, setExtendDate] = useState('');
+  const [extendMethod, setExtendMethod] = useState<'cash' | 'card'>('cash');
+  const [extending, setExtending] = useState(false);
 
   // Build history data — deduplicated: only most recent stay per guest
   const historyData = useMemo(() => {
@@ -113,21 +122,6 @@ export default function Guests() {
 
   // Reset to page 1 when filters change
   useMemo(() => { setPage(1); }, [searchQuery, roomTypeFilter, statusFilter]);
-
-  // Stats
-  const uniqueGuests = new Set(stays.map((s) => s.guestId)).size;
-  const avgStay = historyData.length > 0
-    ? Math.round(historyData.reduce((sum, h) => {
-        const nights = parseInt(h.details) || 1;
-        return sum + nights;
-      }, 0) / historyData.length)
-    : '0';
-  const repeatRate = (() => {
-    const guestCounts = new Map<string, number>();
-    stays.forEach((s) => guestCounts.set(s.guestId, (guestCounts.get(s.guestId) || 0) + 1));
-    const repeatGuests = [...guestCounts.values()].filter((c) => c > 1).length;
-    return uniqueGuests > 0 ? ((repeatGuests / uniqueGuests) * 100).toFixed(1) : '0';
-  })();
 
   const handlePrint = () => {
     window.print();
@@ -202,6 +196,51 @@ export default function Guests() {
     }
   };
 
+  // ── Extend stay ──
+  const extendStay = extendRow ? stays.find((s) => s.id === extendRow.stayId) : undefined;
+  const extraNights = (() => {
+    if (!extendStay || !extendDate) return 0;
+    const current = new Date(`${extendStay.checkOutDate}T00:00:00`).getTime();
+    const next = new Date(`${extendDate}T00:00:00`).getTime();
+    if (Number.isNaN(current) || Number.isNaN(next)) return 0;
+    const diff = Math.round((next - current) / 86400000);
+    return diff > 0 ? diff : 0;
+  })();
+  const extensionCost = extraNights * (extendStay?.rateAmount ?? 0);
+
+  const handleExtendClick = (row: { stayId: string; name: string; room: string; checkOutDate: string }) => {
+    setExtendRow(row);
+    setExtendDate('');
+    setExtendMethod('cash');
+  };
+
+  const handleExtendConfirm = async () => {
+    if (!extendRow || !extendStay) return;
+    if (extraNights <= 0) {
+      toast.error(`New check-out date must be after ${extendRow.checkOutDate}.`);
+      return;
+    }
+    setExtending(true);
+    try {
+      await updateStay(extendStay.id, { checkOutDate: extendDate });
+      await addPayment({
+        stayId: extendStay.id,
+        amount: extensionCost,
+        method: extendMethod,
+        description: `Stay extension (+${extraNights} night${extraNights > 1 ? 's' : ''} @ $${extendStay.rateAmount}/night)`,
+      });
+      toast.success(
+        `Stay extended by ${extraNights} night${extraNights > 1 ? 's' : ''} — $${extensionCost.toFixed(2)} added to billing.`
+      );
+      setExtendRow(null);
+      setExtendDate('');
+    } catch {
+      toast.error('Failed to extend stay.');
+    } finally {
+      setExtending(false);
+    }
+  };
+
   return (
     <div className="p-4 lg:p-6 space-y-4">
       <style dangerouslySetInnerHTML={{ __html: `
@@ -237,45 +276,6 @@ export default function Guests() {
           </Button>
         </div>
       </div>
-
-      {/* Quick Stats */}
-      <AnimateOnScroll>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center">
-              <Users className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Unique Guests</p>
-              <p className="text-xl font-bold">{uniqueGuests}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center">
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Avg. Stay Duration</p>
-              <p className="text-xl font-bold">{avgStay} Days</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
-              <Repeat className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Repeat Guest Rate</p>
-              <p className="text-xl font-bold">{repeatRate}%</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      </AnimateOnScroll>
 
       {/* Filters */}
       <Card className="no-print">
@@ -366,10 +366,9 @@ export default function Guests() {
                   >
                     <TableCell>
                       <div className="flex items-center gap-2.5">
-                        <img
-                          src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(row.name)}`}
-                          alt={row.name}
-                          className="w-8 h-8 rounded-full bg-muted shrink-0"
+                        <InitialsAvatar
+                          name={row.name}
+                          className="w-8 h-8"
                         />
                         <div>
                           <p className="text-sm font-medium">{row.name}</p>
@@ -410,6 +409,18 @@ export default function Guests() {
                             }}
                           >
                             Edit
+                          </Button>
+                        )}
+                        {row.status === 'Active' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-[11px] font-medium text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 dark:border-amber-800 dark:hover:bg-amber-950"
+                            title="Extend Stay"
+                            onClick={() => handleExtendClick(row)}
+                          >
+                            <CalendarPlus className="w-3 h-3 mr-1" />
+                            Extend
                           </Button>
                         )}
                         {row.hasCash && (
@@ -481,6 +492,102 @@ export default function Guests() {
         </Card>
       </div>
       </AnimateOnScroll>
+
+      {/* Extend Stay Dialog */}
+      <Dialog open={!!extendRow} onOpenChange={(open) => { if (!open) { setExtendRow(null); setExtendDate(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarPlus className="w-4 h-4 text-amber-600" /> Extend Stay
+            </DialogTitle>
+          </DialogHeader>
+          {extendRow && extendStay && (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Guest</span>
+                  <span className="font-medium">{extendRow.name}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Room</span>
+                  <span className="font-medium">#{extendRow.room}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">New Check-out Date</Label>
+                <p className="text-[11px] text-muted-foreground">Currently scheduled: {extendRow.checkOutDate}</p>
+                <Input
+                  type="date"
+                  value={extendDate}
+                  min={extendRow.checkOutDate}
+                  onChange={(e) => setExtendDate(e.target.value)}
+                />
+              </div>
+
+              {extendDate && extraNights > 0 ? (
+                <div className="rounded-md border border-border bg-muted/40 p-3 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Extra nights</span>
+                    <span className="font-medium">{extraNights}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Rate</span>
+                    <span className="font-medium">${extendStay.rateAmount}/night</span>
+                  </div>
+                  <div className="border-t border-border my-1" />
+                  <div className="flex justify-between text-sm font-semibold">
+                    <span>Extra Charges</span>
+                    <span>${extensionCost.toFixed(2)}</span>
+                  </div>
+                </div>
+              ) : extendDate ? (
+                <p className="text-xs text-destructive">
+                  New check-out date must be after {extendRow.checkOutDate}.
+                </p>
+              ) : null}
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Payment Method</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['cash', 'card'] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setExtendMethod(m)}
+                      className={`h-8 rounded-md border text-xs font-medium capitalize transition-colors cursor-pointer ${
+                        extendMethod === m
+                          ? 'border-primary bg-primary/5 text-foreground'
+                          : 'border-border hover:border-primary/40'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => { setExtendRow(null); setExtendDate(''); }}
+                  disabled={extending}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleExtendConfirm} disabled={extending || extraNights <= 0}>
+                  {extending ? (
+                    <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 mr-1.5" />
+                  )}
+                  Confirm Extension
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

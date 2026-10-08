@@ -15,6 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import AnimateOnScroll from '@/components/ui/animate-on-scroll';
+import InitialsAvatar from '@/components/ui/initials-avatar';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -139,10 +140,9 @@ export default function Dashboard() {
                     <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/guest/${log.guestId}`)}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <img
-                            src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(log.guest)}`}
-                            alt="avatar"
-                            className="w-7 h-7 rounded-full bg-muted shrink-0"
+                          <InitialsAvatar
+                            name={log.guest}
+                            className="w-7 h-7"
                           />
                           <span className="font-medium text-sm">{log.guest}</span>
                         </div>
@@ -187,11 +187,10 @@ export default function Dashboard() {
                     key={guest.id}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
                   >
-                    <img
-                      src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(guest.name)}`}
-                      alt="avatar"
-                      className="w-9 h-9 rounded-full bg-muted"
-                    />
+                      <InitialsAvatar
+                        name={guest.name}
+                        className="w-9 h-9"
+                      />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{guest.name}</p>
                       <p className="text-xs text-muted-foreground">

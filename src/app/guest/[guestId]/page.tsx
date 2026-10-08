@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import InitialsAvatar from '@/components/ui/initials-avatar';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -230,10 +231,9 @@ export default function GuestDetailsPage() {
         {/* Guest Profile Card */}
         <div className="lg:col-span-2 bg-card border border-border rounded-xl p-6">
           <div className="flex items-start gap-5 mb-6">
-            <img
-              src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(`${guest.firstName} ${guest.lastName}`)}`}
-              alt="avatar"
-              className="h-20 w-20 rounded-full bg-muted"
+            <InitialsAvatar
+              name={`${guest.firstName} ${guest.lastName}`}
+              className="h-20 w-20"
             />
             <div className="flex-1">
               <h1 className="text-2xl font-bold">

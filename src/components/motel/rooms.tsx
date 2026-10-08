@@ -22,6 +22,7 @@ import { useAuth } from '@/components/auth-provider';
 import { toast } from 'sonner';
 import RoomCard from './room-card';
 import AnimateOnScroll from '@/components/ui/animate-on-scroll';
+import InitialsAvatar from '@/components/ui/initials-avatar';
 import type { Room, RoomType, RoomStatus } from '@/lib/types';
 
 const FILTERS = ['All', 'Available', 'Occupied', 'Needs Attention'] as const;
@@ -487,11 +488,10 @@ export default function Rooms() {
                           <User className="w-3.5 h-3.5" /> Current Guest
                         </p>
                         <div className="flex items-center gap-4">
-                          <img
-                            src={`https://api.dicebear.com/10.x/adventurer-neutral/svg?seed=${encodeURIComponent(`${activeStay.guest.firstName} ${activeStay.guest.lastName}`)}`}
-                            alt="avatar"
-                            className="h-12 w-12 rounded-full bg-muted shrink-0"
-                          />
+                            <InitialsAvatar
+                              name={`${activeStay.guest.firstName} ${activeStay.guest.lastName}`}
+                              className="h-12 w-12"
+                            />
                           <div className="space-y-1.5">
                             <p className="text-sm font-semibold">
                               {activeStay.guest.firstName} {activeStay.guest.lastName}
