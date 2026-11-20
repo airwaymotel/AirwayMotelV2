@@ -105,7 +105,6 @@ export default function Home() {
 
   // Live clock
   useEffect(() => {
-    setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
