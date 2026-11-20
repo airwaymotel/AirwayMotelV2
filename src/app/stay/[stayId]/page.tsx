@@ -26,6 +26,7 @@ interface SignatureRecord {
 interface StayDetails {
   stay: Stay;
   guest: Guest;
+  companionGuests?: Guest[];
   room: Room;
   payments: Payment[];
   signatures: SignatureRecord[];
@@ -109,6 +110,7 @@ export default function StayDetailsPage() {
             const stay: Stay = {
               id: stayRow.id,
               guestId: stayRow.guest_id,
+              companionGuestIds: [],
               roomId: stayRow.room_id,
               checkInDate: stayRow.check_in_date,
               checkInTime: stayRow.check_in_time,
@@ -119,7 +121,41 @@ export default function StayDetailsPage() {
               createdAt: stayRow.created_at,
             };
 
-            setData({ stay, guest, room, payments: pmts, signatures });
+            let companionGuests: Guest[] = [];
+            try {
+              const { data: memberRows } = await supabase
+                .from('stay_guest_members')
+                .select('guest_id, is_primary')
+                .eq('stay_id', stayId);
+              if (memberRows && memberRows.length > 0) {
+                const compIds = memberRows
+                  .filter((m: any) => m.guest_id !== stayRow.guest_id)
+                  .map((m: any) => m.guest_id);
+                if (compIds.length > 0) {
+                  stay.companionGuestIds = compIds;
+                  const { data: compRows } = await supabase.from('guests').select('*').in('id', compIds);
+                  if (compRows) {
+                    companionGuests = compRows.map((cg: any) => ({
+                      id: cg.id as string,
+                      firstName: (cg.first_name as string) || '',
+                      lastName: (cg.last_name as string) || '',
+                      phone: (cg.phone as string) || '',
+                      email: (cg.email as string) || '',
+                      idNumber: (cg.id_number as string) || '',
+                      dateOfBirth: cg.date_of_birth ? String(cg.date_of_birth) : '',
+                      idPhotoUrl: (cg.id_photo_url as string) || '',
+                      idType: (cg.id_type as string) || '',
+                      idState: (cg.id_state as string) || '',
+                      createdAt: cg.created_at as string,
+                    }));
+                  }
+                }
+              }
+            } catch {
+              // stay_guest_members table might not exist yet
+            }
+
+            setData({ stay, guest, companionGuests, room, payments: pmts, signatures });
             setLoading(false);
             return;
           }
@@ -142,7 +178,11 @@ export default function StayDetailsPage() {
           return;
         }
 
-        setData({ stay, guest, room, payments: stayPayments, signatures: [] });
+        const companionGuests = (stay.companionGuestIds || [])
+          .map((id) => guests.find((g) => g.id === id))
+          .filter(Boolean) as Guest[];
+
+        setData({ stay, guest, companionGuests, room, payments: stayPayments, signatures: [] });
       } catch (err) {
         console.error('Failed to load stay details:', err);
         setError('Failed to load stay details');
@@ -198,6 +238,7 @@ export default function StayDetailsPage() {
     debit: <Wallet className="w-3.5 h-3.5" />,
   };
 
+  const companionGuests = data.companionGuests || [];
   const hasCashPayments = data.payments.some(p => p.method === 'cash');
 
   return (
@@ -215,8 +256,14 @@ export default function StayDetailsPage() {
               </AvatarFallback>
             </Avatar>
             <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
+              <h1 className="text-2xl font-bold flex items-center gap-2 flex-wrap">
                 {guest.firstName} {guest.lastName}
+                {companionGuests.map((cg) => ` & ${cg.firstName} ${cg.lastName}`)}
+                {companionGuests.length > 0 && (
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border-blue-200">
+                    2 Guests
+                  </Badge>
+                )}
                 <Badge variant={statusInfo.variant} className="text-xs">
                   {statusInfo.icon} {statusInfo.label}
                 </Badge>
@@ -269,7 +316,7 @@ export default function StayDetailsPage() {
           {/* Guest Profile */}
           <div className="bg-card border border-border rounded-xl p-5">
             <h2 className="text-sm font-semibold uppercase text-muted-foreground mb-4 flex items-center gap-2">
-              <User className="w-4 h-4" /> Guest Profile
+              <User className="w-4 h-4" /> Guest Profile {companionGuests.length > 0 ? '(Primary Guest)' : ''}
             </h2>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
@@ -296,6 +343,40 @@ export default function StayDetailsPage() {
                 </div>
               )}
             </div>
+
+            {/* Companion Guests */}
+            {companionGuests.map((cg, i) => (
+              <div key={cg.id} className="mt-5 pt-4 border-t border-border space-y-3">
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
+                  <User className="w-3.5 h-3.5" /> Guest {i + 2}: {cg.firstName} {cg.lastName}
+                </h3>
+                <div className="flex items-center gap-3">
+                  <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Phone</p>
+                    <p className="text-sm font-medium">{cg.phone || '—'}</p>
+                  </div>
+                </div>
+                {cg.email && (
+                  <div className="flex items-center gap-3">
+                    <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Email</p>
+                      <p className="text-sm font-medium">{cg.email}</p>
+                    </div>
+                  </div>
+                )}
+                {cg.dateOfBirth && (
+                  <div className="flex items-center gap-3">
+                    <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Date of Birth</p>
+                      <p className="text-sm font-medium">{cg.dateOfBirth}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
           {/* Stay Details */}
@@ -338,7 +419,10 @@ export default function StayDetailsPage() {
               <Shield className="w-4 h-4" /> Identity & Verification
             </h2>
 
-            {/* ID details */}
+            {/* ID details for Primary Guest */}
+            {companionGuests.length > 0 && (
+              <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Guest 1: {guest.firstName} {guest.lastName}</p>
+            )}
             {(guest.idType || guest.idNumber || guest.idState) && (
               <div className="bg-muted/40 rounded-lg p-3 mb-4 space-y-2">
                 {guest.idType && (
@@ -366,7 +450,7 @@ export default function StayDetailsPage() {
             {guest.idPhotoUrl ? (
               <div className="mb-4">
                 <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
-                  <ImageIcon className="w-3 h-3" /> ID Photo
+                  <ImageIcon className="w-3 h-3" /> {companionGuests.length > 0 ? 'Guest 1 ' : ''}ID Photo
                 </p>
                 <div className="rounded-lg overflow-hidden border border-border bg-muted/20">
                   <img
@@ -379,26 +463,81 @@ export default function StayDetailsPage() {
             ) : (
               <div className="mb-4 bg-muted/30 rounded-lg p-4 text-center text-muted-foreground">
                 <ImageIcon className="w-6 h-6 mx-auto mb-1 opacity-40" />
-                <p className="text-xs">No ID photo on file</p>
+                <p className="text-xs">No {companionGuests.length > 0 ? 'Guest 1 ' : ''}ID photo on file</p>
               </div>
             )}
 
-            {/* Signature */}
-            {signatures.length > 0 && signatures[0].signature_data_url ? (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
-                  <PenLine className="w-3 h-3" /> Guest Signature
-                </p>
-                <div className="border border-border rounded-lg p-3 bg-white dark:bg-zinc-100">
-                  <img
-                    src={signatures[0].signature_data_url}
-                    alt="Guest Signature"
-                    className="max-h-24 object-contain mix-blend-multiply"
-                  />
-                </div>
+            {/* Companion Guest ID details & photo */}
+            {companionGuests.map((cg, i) => (
+              <div key={cg.id} className="mt-5 pt-4 border-t border-border">
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5" /> Guest {i + 2}: {cg.firstName} {cg.lastName}
+                </h3>
+                {(cg.idType || cg.idNumber || cg.idState) && (
+                  <div className="bg-muted/40 rounded-lg p-3 mb-4 space-y-2">
+                    {cg.idType && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Type</span>
+                        <span className="font-medium">{cg.idType}</span>
+                      </div>
+                    )}
+                    {cg.idNumber && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Number</span>
+                        <span className="font-medium font-mono">{cg.idNumber}</span>
+                      </div>
+                    )}
+                    {cg.idState && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">State</span>
+                        <span className="font-medium">{cg.idState}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {cg.idPhotoUrl ? (
+                  <div className="mb-4">
+                    <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
+                      <ImageIcon className="w-3 h-3" /> Guest {i + 2} ID Photo
+                    </p>
+                    <div className="rounded-lg overflow-hidden border border-border bg-muted/20">
+                      <img
+                        src={cg.idPhotoUrl}
+                        alt={`Guest ${i + 2} ID Photo`}
+                        className="w-full max-h-48 object-contain"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-4 bg-muted/30 rounded-lg p-4 text-center text-muted-foreground">
+                    <ImageIcon className="w-6 h-6 mx-auto mb-1 opacity-40" />
+                    <p className="text-xs">No Guest {i + 2} ID photo on file</p>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Signatures */}
+            {signatures.length > 0 ? (
+              <div className="space-y-3 mt-4 pt-4 border-t border-border">
+                {signatures.map((sig, idx) => (
+                  <div key={sig.id || idx}>
+                    <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
+                      <PenLine className="w-3 h-3" />
+                      {signatures.length > 1 ? `Signature ${idx + 1}` : 'Guest Signature'}
+                    </p>
+                    <div className="border border-border rounded-lg p-3 bg-white dark:bg-zinc-100">
+                      <img
+                        src={sig.signature_data_url}
+                        alt={`Signature ${idx + 1}`}
+                        className="max-h-24 object-contain mix-blend-multiply"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
-              <div className="bg-muted/30 rounded-lg p-4 text-center text-muted-foreground">
+              <div className="bg-muted/30 rounded-lg p-4 text-center text-muted-foreground mt-4 pt-4 border-t border-border">
                 <PenLine className="w-6 h-6 mx-auto mb-1 opacity-40" />
                 <p className="text-xs">No signature on file</p>
               </div>

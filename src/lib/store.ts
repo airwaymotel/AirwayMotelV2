@@ -48,9 +48,17 @@ function mapGuestFromDb(row: Record<string, unknown>): Guest {
 }
 
 function mapStayFromDb(row: Record<string, unknown>): Stay {
+  const members = Array.isArray(row.stay_guest_members)
+    ? row.stay_guest_members as Record<string, unknown>[]
+    : [];
+  const companionGuestIds = members
+    .map((member) => member.guest_id as string)
+    .filter((guestId) => guestId && guestId !== (row.guest_id as string));
   return {
     id: row.id as string,
     guestId: row.guest_id as string,
+    companionGuestIds,
+    guestCount: typeof row.guest_count === 'number' ? row.guest_count : Math.max(1, companionGuestIds.length + 1),
     roomId: row.room_id as string,
     checkInDate: row.check_in_date ? String(row.check_in_date) : '',
     checkInTime: row.check_in_time ? String(row.check_in_time) : '',
@@ -112,7 +120,7 @@ const MOCK_PAYMENTS: Payment[] = [
   { id: 'pay-1', stayId: 'stay-1', amount: 80, method: 'card', description: 'Room charge (1 night)', paidAt: twoDaysAgo + 'T14:00:00Z' },
   { id: 'pay-3', stayId: 'stay-2', amount: 100, method: 'cash', description: 'Room charge (1 night)', paidAt: twoDaysAgo + 'T15:30:00Z' },
   { id: 'pay-5', stayId: 'stay-3', amount: 80, method: 'card', description: 'Room charge (1 night)', paidAt: today + 'T11:00:00Z' },
-  { id: 'pay-7', stayId: 'stay-4', amount: 100, method: 'debit', description: 'Room charge (1 night)', paidAt: today + 'T13:00:00Z' },
+  { id: 'pay-7', stayId: 'stay-4', amount: 100, method: 'card', description: 'Room charge (1 night)', paidAt: today + 'T13:00:00Z' },
 ];
 
 const MOCK_ACTIVITY: ActivityLog[] = [
@@ -457,6 +465,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
     if (isSupabaseConnected) {
       const result = await postToApi<{ id: string }>('/api/stays', {
         guest_id: stayData.guestId,
+        companion_guest_ids: stayData.companionGuestIds || [],
         room_id: stayData.roomId,
         rate_type: 'daily',
         rate_amount: stayData.rateAmount,
@@ -578,7 +587,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
   getGuestStays: (guestId) => {
     const { stays, rooms, payments } = get();
     return stays
-      .filter((s) => s.guestId === guestId)
+      .filter((s) => s.guestId === guestId || s.companionGuestIds?.includes(guestId))
       .map((s) => ({
         ...s,
         room: rooms.find((r) => r.id === s.roomId)!,
@@ -610,7 +619,7 @@ export const useMotelStore = create<MotelStore>((set, get) => ({
     const updated = { ...state.motelSettings, ...newSettings };
 
     if (isSupabaseConnected) {
-      const existing = await fetchFromApi<Record<string, unknown>[]>('/api/motel-settings');
+      const existing = await fetchFromApi<Record<string, unknown>>('/api/motel-settings');
       if (existing && existing.length > 0) {
         await patchApi('/api/motel-settings', {
           id: existing[0].id,

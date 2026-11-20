@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useMotelStore } from '@/lib/store';
 import { toast } from 'sonner';
+import type { Guest } from '@/lib/types';
 
 export default function Checkout() {
   const getActiveStays = useMotelStore((s) => s.getActiveStays);
@@ -17,6 +18,7 @@ export default function Checkout() {
   const addPayment = useMotelStore((s) => s.addPayment);
   const addActivity = useMotelStore((s) => s.addActivity);
   const setActiveTab = useMotelStore((s) => s.setActiveTab);
+  const guests = useMotelStore((s) => s.guests);
 
   const [selectedStayId, setSelectedStayId] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -25,6 +27,11 @@ export default function Checkout() {
   const activeStays = getActiveStays();
 
   const selectedStay = activeStays.find((s) => s.id === selectedStayId);
+  const selectedStayCompanions = selectedStay
+    ? (selectedStay.companionGuestIds || [])
+        .map((id) => guests.find((g) => g.id === id))
+        .filter(Boolean) as Guest[]
+    : [];
 
   // Calculate late fee: $10/hour after 10 AM checkout
   // NOTE: Late fee temporarily disabled — uncomment below and restore
@@ -64,7 +71,7 @@ export default function Checkout() {
       checkoutStay(selectedStay.id);
 
       addActivity({
-        guest: `${selectedStay.guest.firstName} ${selectedStay.guest.lastName}`,
+        guest: `${selectedStay.guest.firstName} ${selectedStay.guest.lastName}${selectedStayCompanions.length > 0 ? ` & ${selectedStayCompanions.map(c => `${c.firstName} ${c.lastName}`).join(', ')}` : ''}`,
         action: 'Check-out',
         room: selectedStay.room.roomNumber,
         time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
@@ -108,11 +115,19 @@ export default function Checkout() {
                   <SelectValue placeholder={activeStays.length > 0 ? 'Search by name or room number...' : 'No active stays'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {activeStays.map((stay) => (
-                    <SelectItem key={stay.id} value={stay.id}>
-                      Room {stay.room.roomNumber} — {stay.guest.firstName} {stay.guest.lastName} (Checkout: {stay.checkOutDate})
-                    </SelectItem>
-                  ))}
+                  {activeStays.map((stay) => {
+                    const comps = (stay.companionGuestIds || [])
+                      .map((id) => guests.find((g) => g.id === id))
+                      .filter(Boolean) as Guest[];
+                    const displayName = comps.length > 0
+                      ? `${stay.guest.firstName} ${stay.guest.lastName} & ${comps.map((c) => `${c.firstName} ${c.lastName}`).join(', ')} (2 Guests)`
+                      : `${stay.guest.firstName} ${stay.guest.lastName}`;
+                    return (
+                      <SelectItem key={stay.id} value={stay.id}>
+                        Room {stay.room.roomNumber} — {displayName} (Checkout: {stay.checkOutDate})
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               {activeStays.length === 0 && (
@@ -126,11 +141,19 @@ export default function Checkout() {
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs text-muted-foreground uppercase font-semibold mb-3">Guest Profile</p>
-                <h3 className="text-xl font-bold">
-                  {selectedStay ? `${selectedStay.guest.firstName} ${selectedStay.guest.lastName}` : 'Select Guest'}
+                <h3 className="text-xl font-bold flex items-center gap-2 flex-wrap">
+                  {selectedStay
+                    ? `${selectedStay.guest.firstName} ${selectedStay.guest.lastName}${
+                        selectedStayCompanions.length > 0
+                          ? ` & ${selectedStayCompanions.map((c) => `${c.firstName} ${c.lastName}`).join(', ')}`
+                          : ''
+                      }`
+                    : 'Select Guest'}
                 </h3>
                 <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="secondary" className="text-[10px]">Guest</Badge>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {selectedStayCompanions.length > 0 ? '2 Guests' : 'Guest'}
+                  </Badge>
                   <span className="text-xs text-muted-foreground">ID: {selectedStay?.guest.idNumber || '---'}</span>
                 </div>
                 <div className="mt-5 flex items-center gap-3">

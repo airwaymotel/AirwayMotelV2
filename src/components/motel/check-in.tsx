@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   BedSingle, BedDouble, ArrowRight, ArrowLeft, CheckCircle,
   CreditCard, Banknote, PenLine, Upload,
-  Camera, Loader2, X, ImageIcon, ScanLine, DoorOpen, User,
+  Camera, Loader2, X, ImageIcon, ScanLine, DoorOpen, User, Users,
   AlertCircle, RefreshCcw, Search,
 } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
@@ -391,6 +391,32 @@ const STEPS = [
   const [phoneSigError, setPhoneSigError] = useState('');
   const phoneSigPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── New guest fields (for party size > 1) ──
+  const [partySize, setPartySize] = useState<1 | 2>(1);
+  const [termsAcceptedGuest2, setTermsAcceptedGuest2] = useState(false);
+  const [secondFirstName, setSecondFirstName] = useState('');
+  const [secondLastName, setSecondLastName] = useState('');
+  const [secondPhone, setSecondPhone] = useState('');
+  const [secondEmail, setSecondEmail] = useState('');
+  const [secondIdNumber, setSecondIdNumber] = useState('');
+  const [secondIdType, setSecondIdType] = useState('Driver License');
+  const [secondIdState, setSecondIdState] = useState('');
+  const [secondDateOfBirth, setSecondDateOfBirth] = useState('');
+  const [secondAddress, setSecondAddress] = useState('');
+  const [secondIdPhotoPreview, setSecondIdPhotoPreview] = useState<string | null>(null);
+  const [secondIdPhotoUrl, setSecondIdPhotoUrl] = useState('');
+  const [secondIdScanned, setSecondIdScanned] = useState(false);
+  const secondFileInputRef = useRef<HTMLInputElement>(null);
+  const secondSigCanvas = useRef<SignatureCanvas>(null);
+  const [secondSignatureDataUrl, setSecondSignatureDataUrl] = useState('');
+  const [activeGuestTab, setActiveGuestTab] = useState<1 | 2>(1);
+  const [secondSignatureFromPhone, setSecondSignatureFromPhone] = useState(false);
+  const [showSecondPhoneSignature, setShowSecondPhoneSignature] = useState(false);
+  const [secondIsReturningCustomer, setSecondIsReturningCustomer] = useState(false);
+  const [secondReturningSearchQuery, setSecondReturningSearchQuery] = useState('');
+  const [selectedSecondReturningGuestId, setSelectedSecondReturningGuestId] = useState('');
+  const [showSecondReturningSelector, setShowSecondReturningSelector] = useState(false);
+
   // ── Derived ──
   const availableRooms = useMemo(
     () => rooms.filter((r) => r.status === 'available' && r.type === roomType),
@@ -601,12 +627,27 @@ const STEPS = [
   const canNext = (): boolean => {
     switch (step) {
       case 0: return selectedRoomId !== '';
-      case 1:
-        if (isReturningCustomer) return selectedReturningGuestId !== '';
-        return idScanned && idNumber.length >= 4;
-      case 2: return firstName.length >= 2 && lastName.length >= 2 && phone.length >= 10;
+      case 1: {
+        const guest1Ready = isReturningCustomer ? selectedReturningGuestId !== '' : (idScanned && idNumber.length >= 4);
+        if (partySize === 1) return guest1Ready;
+        const guest2Ready = secondIsReturningCustomer ? selectedSecondReturningGuestId !== '' : (secondIdScanned && secondIdNumber.length >= 4);
+        return guest1Ready && guest2Ready;
+      }
+      case 2: {
+        const guest1Valid = firstName.length >= 2 && lastName.length >= 2 && phone.length >= 10;
+        if (partySize === 1) return guest1Valid;
+        const guest2Valid = secondFirstName.length >= 2 && secondLastName.length >= 2 && secondPhone.length >= 10;
+        return guest1Valid && guest2Valid;
+      }
       case 3: return true;
-      case 4: return termsAccepted;
+      case 4: {
+        const hasSig1 = signatureDataUrl.length > 0 || (sigCanvas.current ? !sigCanvas.current.isEmpty() : false);
+        const guest1Done = termsAccepted && hasSig1;
+        if (partySize === 1) return guest1Done;
+        const hasSig2 = secondSignatureDataUrl.length > 0 || (secondSigCanvas.current ? !secondSigCanvas.current.isEmpty() : false);
+        const guest2Done = termsAcceptedGuest2 && hasSig2;
+        return guest1Done && guest2Done;
+      }
       case 5: return false;
       default: return false;
     }
@@ -630,8 +671,20 @@ const STEPS = [
       return;
     }
 
-    if (!termsAccepted) {
-      toast.error('Please accept the terms and conditions before completing check-in.');
+    let finalSig1 = signatureDataUrl;
+    if (!finalSig1 && sigCanvas.current && !sigCanvas.current.isEmpty()) {
+      finalSig1 = sigCanvas.current.getCanvas().toDataURL('image/png');
+      setSignatureDataUrl(finalSig1);
+    }
+
+    let finalSig2 = secondSignatureDataUrl;
+    if (partySize === 2 && !finalSig2 && secondSigCanvas.current && !secondSigCanvas.current.isEmpty()) {
+      finalSig2 = secondSigCanvas.current.getCanvas().toDataURL('image/png');
+      setSecondSignatureDataUrl(finalSig2);
+    }
+
+    if (!termsAccepted || (partySize === 2 && (!termsAcceptedGuest2 || !finalSig2))) {
+      toast.error('Both guests must accept the terms and provide signatures before completing check-in.');
       return;
     }
 
@@ -653,8 +706,26 @@ const STEPS = [
             idState: idState || undefined,
           });
 
+      const companionGuestId = partySize === 2
+        ? (secondIsReturningCustomer && selectedSecondReturningGuestId
+            ? selectedSecondReturningGuestId
+            : await addGuest({
+                firstName: secondFirstName,
+                lastName: secondLastName,
+                phone: secondPhone,
+                email: secondEmail,
+                idNumber: secondIdNumber,
+                dateOfBirth: secondDateOfBirth,
+                idPhotoUrl: secondIdPhotoUrl || undefined,
+                idType: secondIdType || undefined,
+                idState: secondIdState || undefined,
+              }))
+        : undefined;
+
        const stayId = await addStay({
          guestId,
+         companionGuestIds: companionGuestId ? [companionGuestId] : [],
+         guestCount: partySize,
          roomId: selectedRoomId,
          checkInDate,
          checkInTime,
@@ -692,7 +763,7 @@ const STEPS = [
       updateRoomStatus(selectedRoomId, 'occupied');
 
       addActivity({
-        guest: `${firstName} ${lastName}`,
+        guest: partySize === 2 ? `${firstName} ${lastName} & ${secondFirstName} ${secondLastName}` : `${firstName} ${lastName}`,
         action: 'Check-in',
         room: selectedRoom.roomNumber,
         time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
@@ -700,13 +771,23 @@ const STEPS = [
       });
 
       // Save signature to Supabase if connected
-      if (supabase && signatureDataUrl) {
+      if (supabase && finalSig1) {
         const { error } = await supabase.from('signatures').insert({
           stay_id: stayId,
           guest_id: guestId,
-          signature_data_url: signatureDataUrl,
+          signature_data_url: finalSig1,
         });
         if (error) console.error('Failed to save signature:', error);
+      }
+
+      // Save second guest signature if applicable
+      if (supabase && finalSig2 && companionGuestId) {
+        const { error: secondSignatureError } = await supabase.from('signatures').insert({
+          stay_id: stayId,
+          guest_id: companionGuestId,
+          signature_data_url: finalSig2,
+        });
+        if (secondSignatureError) console.error('Failed to save second guest signature:', secondSignatureError);
       }
 
       // Log operator activity
@@ -718,7 +799,7 @@ const STEPS = [
           guest_id: guestId,
           room_id: selectedRoomId,
           amount: totalDue,
-          description: `${firstName} ${lastName} — ${nights} night${nights > 1 ? 's' : ''} (${roomType})`,
+          description: `${firstName} ${lastName}${partySize === 2 ? ` & ${secondFirstName} ${secondLastName}` : ''} — ${nights} night${nights > 1 ? 's' : ''} (${roomType})`,
         });
       }
 
@@ -770,7 +851,91 @@ const STEPS = [
     setIsReturningCustomer(false);
     setShowReturningSelector(false);
     setSelectedReturningGuestId('');
+
+    // Reset second guest state
+    setPartySize(1);
+    setActiveGuestTab(1);
+    setTermsAcceptedGuest2(false);
+    setSecondFirstName('');
+    setSecondLastName('');
+    setSecondPhone('');
+    setSecondEmail('');
+    setSecondIdNumber('');
+    setSecondIdType('Driver License');
+    setSecondIdState('');
+    setSecondDateOfBirth('');
+    setSecondAddress('');
+    setSecondIdPhotoPreview(null);
+    setSecondIdPhotoUrl('');
+    setSecondIdScanned(false);
+    setSecondSignatureDataUrl('');
+    setSecondSignatureFromPhone(false);
+    setShowSecondPhoneSignature(false);
+    setSecondIsReturningCustomer(false);
+    setSelectedSecondReturningGuestId('');
+    setSecondReturningSearchQuery('');
+    setShowSecondReturningSelector(false);
   };
+
+  const handleSecondReturningGuestSelect = useCallback((guestId: string) => {
+    const guest = guests.find((g) => g.id === guestId);
+    if (!guest) return;
+
+    setSelectedSecondReturningGuestId(guestId);
+    setSecondFirstName(guest.firstName);
+    setSecondLastName(guest.lastName);
+    setSecondPhone(guest.phone);
+    setSecondEmail(guest.email || '');
+    setSecondIdNumber(guest.idNumber);
+    setSecondIdType(guest.idType || 'Driver License');
+    setSecondIdState(guest.idState || '');
+    setSecondDateOfBirth(guest.dateOfBirth);
+    setSecondIdPhotoPreview(guest.idPhotoUrl || null);
+    setSecondIdPhotoUrl(guest.idPhotoUrl || '');
+    setSecondIdScanned(true);
+    setSecondIsReturningCustomer(true);
+    toast.success(`Loaded second guest: ${guest.firstName} ${guest.lastName}`);
+  }, [guests]);
+
+  // ── Second guest handlers ──
+  const handleSecondScanComplete = useCallback((data: ScannedIdData, imageBase64?: string) => {
+    if (data.firstName) setSecondFirstName(data.firstName);
+    if (data.lastName) setSecondLastName(data.lastName);
+    if (data.idNumber) setSecondIdNumber(data.idNumber);
+    if (data.idType) setSecondIdType(data.idType);
+    if (data.issuingState) setSecondIdState(data.issuingState);
+    if (data.dateOfBirth) setSecondDateOfBirth(data.dateOfBirth);
+    if (data.address) {
+      const parts = [data.address.street, data.address.city, data.address.state, data.address.zipCode].filter(Boolean);
+      if (parts.length > 0) setSecondAddress(parts.join(', '));
+    }
+    if (imageBase64) {
+      setSecondIdPhotoPreview(imageBase64);
+      setSecondIdPhotoUrl(imageBase64);
+    }
+    setSecondIdScanned(true);
+    toast.success('Second guest ID extracted — please review the details');
+  }, []);
+
+  const handleSecondFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setSecondIdPhotoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+    if (supabase) {
+      try {
+        const fileName = `id_guest2_${Date.now()}_${file.name}`;
+        const { error } = await supabase.storage.from('ids').upload(fileName, file, { contentType: file.type, upsert: false });
+        if (error) { toast.error('Failed to upload second guest ID'); return; }
+        const { data } = supabase.storage.from('ids').getPublicUrl(fileName);
+        setSecondIdPhotoUrl(data.publicUrl);
+        toast.success('Second guest ID uploaded');
+      } catch { toast.error('Second guest ID upload failed'); }
+    } else {
+      reader.onloadend = () => setSecondIdPhotoUrl(reader.result as string);
+    }
+  }, []);
 
   return (
     <div className="p-4 lg:p-6">
@@ -843,6 +1008,43 @@ const STEPS = [
                 </button>
               </div>
 
+              {/* Number of Guests / Party Size */}
+              <div className="space-y-2 pt-2 border-t border-border">
+                <Label className="block text-sm font-medium">Number of Guests</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setPartySize(1); setActiveGuestTab(1); }}
+                    className={`p-3.5 rounded-lg border-2 transition-all cursor-pointer flex items-center gap-3 ${
+                      partySize === 1
+                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                        : 'border-border hover:border-primary/40 hover:bg-muted/30'
+                    }`}
+                  >
+                    <User className={`w-5 h-5 shrink-0 ${partySize === 1 ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <div className="text-left">
+                      <p className="font-semibold text-sm">1 Guest</p>
+                      <p className="text-[11px] text-muted-foreground">Single traveler</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPartySize(2); setActiveGuestTab(1); }}
+                    className={`p-3.5 rounded-lg border-2 transition-all cursor-pointer flex items-center gap-3 ${
+                      partySize === 2
+                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                        : 'border-border hover:border-primary/40 hover:bg-muted/30'
+                    }`}
+                  >
+                    <Users className={`w-5 h-5 shrink-0 ${partySize === 2 ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <div className="text-left">
+                      <p className="font-semibold text-sm">2 Guests</p>
+                      <p className="text-[11px] text-muted-foreground">Couple / Two people</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <Label className="mb-2 block">
                   Available Rooms{' '}
@@ -892,197 +1094,480 @@ const STEPS = [
         {/* ── Step 1: Scan ID ── */}
         {step === 1 && (
           <div className="space-y-4">
-            {/* Returning Customer Toggle */}
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <User className="w-5 h-5 text-muted-foreground" />
-                  <p className="text-sm font-medium">Returning Customer?</p>
-                </div>
-                <div className="flex gap-3">
-                  <Button
-                    variant={isReturningCustomer ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => {
-                      setIsReturningCustomer(true);
-                      setShowReturningSelector(true);
-                    }}
-                  >
-                    Yes, Returning Guest
-                  </Button>
-                  <Button
-                    variant={!isReturningCustomer ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => {
-                      setIsReturningCustomer(false);
-                      setShowReturningSelector(false);
-                    }}
-                  >
-                    New Guest
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Quick Party Size Toggle Banner */}
+            <div className="flex items-center justify-between p-3 bg-muted/40 rounded-lg border border-border">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Party Size:</span>
+                <Badge variant={partySize === 2 ? 'default' : 'secondary'} className="text-xs">
+                  {partySize === 1 ? '1 Guest (Single)' : '2 Guests (Couple / Party)'}
+                </Badge>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  setPartySize(partySize === 1 ? 2 : 1);
+                  setActiveGuestTab(1);
+                }}
+              >
+                Switch to {partySize === 1 ? '2 Guests' : '1 Guest'}
+              </Button>
+            </div>
 
-            {/* Returning Guest Selector */}
-            {isReturningCustomer && showReturningSelector && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Select Returning Guest</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by name, phone, or ID..."
-                      value={returningSearchQuery}
-                      onChange={(e) => setReturningSearchQuery(e.target.value)}
-                      className="pl-8"
-                      autoFocus
-                    />
+            {/* If 2 guests, show sub-tabs for Guest 1 and Guest 2 */}
+            {partySize === 2 && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveGuestTab(1)}
+                  className={`p-3 rounded-lg border-2 transition-all flex items-center justify-between cursor-pointer ${
+                    activeGuestTab === 1
+                      ? 'border-primary bg-primary/5 font-semibold text-foreground ring-1 ring-primary/20'
+                      : 'border-border text-muted-foreground hover:bg-muted/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    <span className="text-sm">Guest 1 (Primary)</span>
                   </div>
-                  {guests.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No previous guests found.</p>
+                  {(isReturningCustomer ? selectedReturningGuestId : (idScanned && idNumber.length >= 4)) ? (
+                    <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 text-[10px] gap-1">
+                      <CheckCircle className="w-3 h-3" /> Ready
+                    </Badge>
                   ) : (
-                    <div className="max-h-60 overflow-y-auto space-y-1">
-                      {guests
-                        .filter((g) => {
-                          if (!returningSearchQuery.trim()) return true;
-                          const q = returningSearchQuery.toLowerCase();
-                          return (
-                            `${g.firstName} ${g.lastName}`.toLowerCase().includes(q) ||
-                            g.phone.toLowerCase().includes(q) ||
-                            (g.idNumber && g.idNumber.toLowerCase().includes(q))
-                          );
-                        })
-                        .map((g) => (
-                          <button
-                            key={g.id}
-                            onClick={() => {
-                              handleReturningGuestSelect(g.id);
-                              setReturningSearchQuery('');
-                            }}
-                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer ${
-                              selectedReturningGuestId === g.id
-                                ? 'bg-primary text-primary-foreground'
-                                : 'hover:bg-muted'
-                            }`}
-                          >
-                            <p className="font-medium">{g.firstName} {g.lastName}</p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {g.idNumber || 'No ID'}{g.phone ? ` · ${g.phone}` : ''}
-                            </p>
-                          </button>
-                        ))}
-                      {guests.filter((g) => {
-                        if (!returningSearchQuery.trim()) return true;
-                        const q = returningSearchQuery.toLowerCase();
-                        return (
-                          `${g.firstName} ${g.lastName}`.toLowerCase().includes(q) ||
-                          g.phone.toLowerCase().includes(q) ||
-                          (g.idNumber && g.idNumber.toLowerCase().includes(q))
-                        );
-                      }).length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-2">No guests match your search.</p>
-                      )}
-                    </div>
+                    <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                      Pending ID
+                    </Badge>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => {
-                      setIsReturningCustomer(false);
-                      setShowReturningSelector(false);
-                      setSelectedReturningGuestId('');
-                      setReturningSearchQuery('');
-                    }}
-                  >
-                    Cancel — Use New Guest Flow
-                  </Button>
-                </CardContent>
-              </Card>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveGuestTab(2)}
+                  className={`p-3 rounded-lg border-2 transition-all flex items-center justify-between cursor-pointer ${
+                    activeGuestTab === 2
+                      ? 'border-primary bg-primary/5 font-semibold text-foreground ring-1 ring-primary/20'
+                      : 'border-border text-muted-foreground hover:bg-muted/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    <span className="text-sm">Guest 2</span>
+                  </div>
+                  {(secondIsReturningCustomer ? selectedSecondReturningGuestId : (secondIdScanned && secondIdNumber.length >= 4)) ? (
+                    <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 text-[10px] gap-1">
+                      <CheckCircle className="w-3 h-3" /> Ready
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                      Pending ID
+                    </Badge>
+                  )}
+                </button>
+              </div>
             )}
 
-            {/* New Guest: ID Scanner (only when not returning customer) */}
-            {!isReturningCustomer && (
-              <>
-                <IdScanner
-                  onScanComplete={handleScanComplete}
-                  onSignatureReceived={handleSignatureReceived}
-                />
-
-                {/* Manual ID entry fallback (always visible) */}
+            {/* ── Guest 1 Scan Flow ── */}
+            {(partySize === 1 || activeGuestTab === 1) && (
+              <div className="space-y-4">
+                {/* Returning Customer Toggle */}
                 <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
-                      <PenLine className="w-4 h-4" /> Or enter manually
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label className="mb-1 block text-xs">ID Type</Label>
-                        <Select value={idType} onValueChange={setIdType}>
-                          <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Driver License">Driver License</SelectItem>
-                            <SelectItem value="State ID">State ID</SelectItem>
-                            <SelectItem value="Passport">Passport</SelectItem>
-                            <SelectItem value="Military ID">Military ID</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label className="mb-1 block text-xs">ID State</Label>
-                        <Input value={idState} onChange={(e) => setIdState(e.target.value)} placeholder="CO" className="h-9 text-sm" />
-                      </div>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <User className="w-5 h-5 text-muted-foreground" />
+                      <p className="text-sm font-medium">Guest 1: Returning Customer?</p>
                     </div>
-                    <div>
-                      <Label className="mb-1 block text-xs">ID Number *</Label>
-                      <Input value={idNumber} onChange={(e) => { setIdNumber(e.target.value); if (e.target.value.length >= 4) setIdScanned(true); }} placeholder="DL-123456" className="h-9 text-sm" />
-                    </div>
-                    <div>
-                      <Label className="mb-1 block text-xs">Date of Birth *</Label>
-                      <Input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className="h-9 text-sm" />
-                    </div>
-
-                    {/* Optional file upload */}
-                    <div>
-                      <Label className="mb-1 block text-xs">Upload ID Photo</Label>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                      />
-                      {idPhotoPreview ? (
-                        <div className="relative rounded-lg overflow-hidden border border-border">
-                          <img src={idPhotoPreview} alt="ID Preview" className="w-full max-h-32 object-contain bg-muted/30" />
-                          <button
-                            onClick={() => { setIdPhotoPreview(null); setIdPhotoUrl(''); }}
-                            className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          className="w-full p-4 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors cursor-pointer text-xs"
-                        >
-                          <Upload className="w-4 h-4" />
-                          <span>Upload ID photo</span>
-                        </button>
-                      )}
+                    <div className="flex gap-3">
+                      <Button
+                        variant={isReturningCustomer ? 'default' : 'outline'}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setIsReturningCustomer(true);
+                          setShowReturningSelector(true);
+                        }}
+                      >
+                        Yes, Returning Guest
+                      </Button>
+                      <Button
+                        variant={!isReturningCustomer ? 'default' : 'outline'}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setIsReturningCustomer(false);
+                          setShowReturningSelector(false);
+                        }}
+                      >
+                        New Guest
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
-              </>
+
+                {/* Returning Guest Selector */}
+                {isReturningCustomer && showReturningSelector && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm">Select Returning Guest</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name, phone, or ID..."
+                          value={returningSearchQuery}
+                          onChange={(e) => setReturningSearchQuery(e.target.value)}
+                          className="pl-8"
+                          autoFocus
+                        />
+                      </div>
+                      {guests.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No previous guests found.</p>
+                      ) : (
+                        <div className="max-h-60 overflow-y-auto space-y-1">
+                          {guests
+                            .filter((g) => {
+                              if (!returningSearchQuery.trim()) return true;
+                              const q = returningSearchQuery.toLowerCase();
+                              return (
+                                `${g.firstName} ${g.lastName}`.toLowerCase().includes(q) ||
+                                g.phone.toLowerCase().includes(q) ||
+                                (g.idNumber && g.idNumber.toLowerCase().includes(q))
+                              );
+                            })
+                            .map((g) => (
+                              <button
+                                key={g.id}
+                                onClick={() => {
+                                  handleReturningGuestSelect(g.id);
+                                  setReturningSearchQuery('');
+                                }}
+                                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer ${
+                                  selectedReturningGuestId === g.id
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'hover:bg-muted'
+                                }`}
+                              >
+                                <p className="font-medium">{g.firstName} {g.lastName}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {g.idNumber || 'No ID'}{g.phone ? ` · ${g.phone}` : ''}
+                                </p>
+                              </button>
+                            ))}
+                          {guests.filter((g) => {
+                            if (!returningSearchQuery.trim()) return true;
+                            const q = returningSearchQuery.toLowerCase();
+                            return (
+                              `${g.firstName} ${g.lastName}`.toLowerCase().includes(q) ||
+                              g.phone.toLowerCase().includes(q) ||
+                              (g.idNumber && g.idNumber.toLowerCase().includes(q))
+                            );
+                          }).length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-2">No guests match your search.</p>
+                          )}
+                        </div>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setIsReturningCustomer(false);
+                          setShowReturningSelector(false);
+                          setSelectedReturningGuestId('');
+                          setReturningSearchQuery('');
+                        }}
+                      >
+                        Cancel — Use New Guest Flow
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* New Guest: ID Scanner (only when not returning customer) */}
+                {!isReturningCustomer && (
+                  <>
+                    <IdScanner
+                      onScanComplete={handleScanComplete}
+                      onSignatureReceived={handleSignatureReceived}
+                    />
+
+                    {/* Manual ID entry fallback (always visible) */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
+                          <PenLine className="w-4 h-4" /> Or enter manually
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="mb-1 block text-xs">ID Type</Label>
+                            <Select value={idType} onValueChange={setIdType}>
+                              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Driver License">Driver License</SelectItem>
+                                <SelectItem value="State ID">State ID</SelectItem>
+                                <SelectItem value="Passport">Passport</SelectItem>
+                                <SelectItem value="Military ID">Military ID</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="mb-1 block text-xs">ID State</Label>
+                            <Input value={idState} onChange={(e) => setIdState(e.target.value)} placeholder="CO" className="h-9 text-sm" />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="mb-1 block text-xs">ID Number *</Label>
+                          <Input value={idNumber} onChange={(e) => { setIdNumber(e.target.value); if (e.target.value.length >= 4) setIdScanned(true); }} placeholder="DL-123456" className="h-9 text-sm" />
+                        </div>
+                        <div>
+                          <Label className="mb-1 block text-xs">Date of Birth *</Label>
+                          <Input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className="h-9 text-sm" />
+                        </div>
+
+                        {/* Optional file upload */}
+                        <div>
+                          <Label className="mb-1 block text-xs">Upload ID Photo</Label>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleFileUpload}
+                            className="hidden"
+                          />
+                          {idPhotoPreview ? (
+                            <div className="relative rounded-lg overflow-hidden border border-border">
+                              <img src={idPhotoPreview} alt="ID Preview" className="w-full max-h-32 object-contain bg-muted/30" />
+                              <button
+                                onClick={() => { setIdPhotoPreview(null); setIdPhotoUrl(''); }}
+                                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => fileInputRef.current?.click()}
+                              className="w-full p-4 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors cursor-pointer text-xs"
+                            >
+                              <Upload className="w-4 h-4" />
+                              <span>Upload ID photo</span>
+                            </button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── Guest 2 Scan Flow (Party size === 2) ── */}
+            {partySize === 2 && activeGuestTab === 2 && (
+              <div className="space-y-4">
+                {/* Returning Customer Toggle for Guest 2 */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Users className="w-5 h-5 text-muted-foreground" />
+                      <p className="text-sm font-medium">Guest 2: Returning Customer?</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <Button
+                        variant={secondIsReturningCustomer ? 'default' : 'outline'}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setSecondIsReturningCustomer(true);
+                          setShowSecondReturningSelector(true);
+                        }}
+                      >
+                        Yes, Returning Guest
+                      </Button>
+                      <Button
+                        variant={!secondIsReturningCustomer ? 'default' : 'outline'}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setSecondIsReturningCustomer(false);
+                          setShowSecondReturningSelector(false);
+                        }}
+                      >
+                        New Guest
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Returning Guest Selector for Guest 2 */}
+                {secondIsReturningCustomer && showSecondReturningSelector && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm">Select Returning Guest 2</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name, phone, or ID..."
+                          value={secondReturningSearchQuery}
+                          onChange={(e) => setSecondReturningSearchQuery(e.target.value)}
+                          className="pl-8"
+                          autoFocus
+                        />
+                      </div>
+                      {guests.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No previous guests found.</p>
+                      ) : (
+                        <div className="max-h-60 overflow-y-auto space-y-1">
+                          {guests
+                            .filter((g) => {
+                              if (!secondReturningSearchQuery.trim()) return true;
+                              const q = secondReturningSearchQuery.toLowerCase();
+                              return (
+                                `${g.firstName} ${g.lastName}`.toLowerCase().includes(q) ||
+                                g.phone.toLowerCase().includes(q) ||
+                                (g.idNumber && g.idNumber.toLowerCase().includes(q))
+                              );
+                            })
+                            .map((g) => (
+                              <button
+                                key={g.id}
+                                onClick={() => {
+                                  handleSecondReturningGuestSelect(g.id);
+                                  setSecondReturningSearchQuery('');
+                                }}
+                                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer ${
+                                  selectedSecondReturningGuestId === g.id
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'hover:bg-muted'
+                                }`}
+                              >
+                                <p className="font-medium">{g.firstName} {g.lastName}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {g.idNumber || 'No ID'}{g.phone ? ` · ${g.phone}` : ''}
+                                </p>
+                              </button>
+                            ))}
+                          {guests.filter((g) => {
+                            if (!secondReturningSearchQuery.trim()) return true;
+                            const q = secondReturningSearchQuery.toLowerCase();
+                            return (
+                              `${g.firstName} ${g.lastName}`.toLowerCase().includes(q) ||
+                              g.phone.toLowerCase().includes(q) ||
+                              (g.idNumber && g.idNumber.toLowerCase().includes(q))
+                            );
+                          }).length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-2">No guests match your search.</p>
+                          )}
+                        </div>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setSecondIsReturningCustomer(false);
+                          setShowSecondReturningSelector(false);
+                          setSelectedSecondReturningGuestId('');
+                          setSecondReturningSearchQuery('');
+                        }}
+                      >
+                        Cancel — Use New Guest Flow
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* New Guest 2: ID Scanner */}
+                {!secondIsReturningCustomer && (
+                  <>
+                    <IdScanner
+                      onScanComplete={handleSecondScanComplete}
+                      onSignatureReceived={(sigUrl, terms) => {
+                        setSecondSignatureDataUrl(sigUrl);
+                        setSecondSignatureFromPhone(true);
+                        if (terms) setTermsAcceptedGuest2(true);
+                        toast.success('Second guest signature received from phone');
+                      }}
+                    />
+
+                    {/* Manual ID entry fallback for Guest 2 */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
+                          <PenLine className="w-4 h-4" /> Or enter Guest 2 ID manually
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="mb-1 block text-xs">ID Type</Label>
+                            <Select value={secondIdType} onValueChange={setSecondIdType}>
+                              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Driver License">Driver License</SelectItem>
+                                <SelectItem value="State ID">State ID</SelectItem>
+                                <SelectItem value="Passport">Passport</SelectItem>
+                                <SelectItem value="Military ID">Military ID</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="mb-1 block text-xs">ID State</Label>
+                            <Input value={secondIdState} onChange={(e) => setSecondIdState(e.target.value)} placeholder="CO" className="h-9 text-sm" />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="mb-1 block text-xs">ID Number *</Label>
+                          <Input value={secondIdNumber} onChange={(e) => { setSecondIdNumber(e.target.value); if (e.target.value.length >= 4) setSecondIdScanned(true); }} placeholder="DL-123456" className="h-9 text-sm" />
+                        </div>
+                        <div>
+                          <Label className="mb-1 block text-xs">Date of Birth *</Label>
+                          <Input type="date" value={secondDateOfBirth} onChange={(e) => setSecondDateOfBirth(e.target.value)} className="h-9 text-sm" />
+                        </div>
+
+                        {/* Guest 2 file upload */}
+                        <div>
+                          <Label className="mb-1 block text-xs">Upload Guest 2 ID Photo</Label>
+                          <input
+                            ref={secondFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleSecondFileUpload}
+                            className="hidden"
+                          />
+                          {secondIdPhotoPreview ? (
+                            <div className="relative rounded-lg overflow-hidden border border-border">
+                              <img src={secondIdPhotoPreview} alt="Guest 2 ID Preview" className="w-full max-h-32 object-contain bg-muted/30" />
+                              <button
+                                onClick={() => { setSecondIdPhotoPreview(null); setSecondIdPhotoUrl(''); }}
+                                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => secondFileInputRef.current?.click()}
+                              className="w-full p-4 border-2 border-dashed border-border rounded-lg flex items-center justify-center gap-2 text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors cursor-pointer text-xs"
+                            >
+                              <Upload className="w-4 h-4" />
+                              <span>Upload Guest 2 ID photo</span>
+                            </button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -1091,82 +1576,174 @@ const STEPS = [
         {step === 2 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Guest Details</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Guest Details</CardTitle>
+                {partySize === 2 && (
+                  <Badge variant="outline" className="text-xs">2 Guests</Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Scan info banner */}
-              {idScanned && (
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
-                  <p className="text-xs text-green-700 dark:text-green-300">
-                    ID data auto-filled from scan. Please verify and add contact info.
-                  </p>
+              {/* Sub-tabs for party size 2 */}
+              {partySize === 2 && (
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveGuestTab(1)}
+                    className={`p-2.5 rounded-lg border-2 transition-all text-sm font-medium cursor-pointer ${
+                      activeGuestTab === 1
+                        ? 'border-primary bg-primary/5 text-foreground ring-1 ring-primary/20'
+                        : 'border-border text-muted-foreground hover:bg-muted/30'
+                    }`}
+                  >
+                    Guest 1: {firstName || 'Primary'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveGuestTab(2)}
+                    className={`p-2.5 rounded-lg border-2 transition-all text-sm font-medium cursor-pointer ${
+                      activeGuestTab === 2
+                        ? 'border-primary bg-primary/5 text-foreground ring-1 ring-primary/20'
+                        : 'border-border text-muted-foreground hover:bg-muted/30'
+                    }`}
+                  >
+                    Guest 2: {secondFirstName || 'Second Guest'}
+                  </button>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="firstName" className="mb-1.5 block">First Name *</Label>
-                  <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="John" />
-                </div>
-                <div>
-                  <Label htmlFor="lastName" className="mb-1.5 block">Last Name *</Label>
-                  <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Doe" />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="phone" className="mb-1.5 block">Phone *</Label>
-                <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(720) 555-0100" />
-              </div>
-              <div>
-                <Label htmlFor="email" className="mb-1.5 block">Email</Label>
-                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="guest@email.com" />
-              </div>
-
-              {/* Auto-filled ID info (read-only display) */}
-              <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-                <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">From ID Scan</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-[10px] text-muted-foreground">ID Number</p>
-                    <p className="text-sm font-medium font-mono">{idNumber || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground">Date of Birth</p>
-                    <p className="text-sm font-medium">{dateOfBirth || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground">ID Type</p>
-                    <p className="text-sm font-medium">{idType}{idState ? ` — ${idState}` : ''}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground">Gender</p>
-                    <p className="text-sm font-medium">{gender || '—'}</p>
-                  </div>
-                  {address && (
-                    <div className="col-span-2">
-                      <p className="text-[10px] text-muted-foreground">Address</p>
-                      <p className="text-sm font-medium">{address}</p>
+              {/* ── Guest 1 Details ── */}
+              {(partySize === 1 || activeGuestTab === 1) && (
+                <div className="space-y-4">
+                  {/* Scan info banner */}
+                  {idScanned && (
+                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                      <p className="text-xs text-green-700 dark:text-green-300">
+                        Guest 1 ID data auto-filled from scan. Please verify and add contact info.
+                      </p>
                     </div>
                   )}
-                  {(eyeColor || height) && (
-                    <>
-                      {eyeColor && (
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">Eye Color</p>
-                          <p className="text-sm font-medium">{eyeColor}</p>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="firstName" className="mb-1.5 block">First Name *</Label>
+                      <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="John" />
+                    </div>
+                    <div>
+                      <Label htmlFor="lastName" className="mb-1.5 block">Last Name *</Label>
+                      <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Doe" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="phone" className="mb-1.5 block">Phone *</Label>
+                    <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(720) 555-0100" />
+                  </div>
+                  <div>
+                    <Label htmlFor="email" className="mb-1.5 block">Email</Label>
+                    <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="guest@email.com" />
+                  </div>
+
+                  {/* Auto-filled ID info (read-only display) */}
+                  <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Guest 1 — From ID Scan</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">ID Number</p>
+                        <p className="text-sm font-medium font-mono">{idNumber || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Date of Birth</p>
+                        <p className="text-sm font-medium">{dateOfBirth || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">ID Type</p>
+                        <p className="text-sm font-medium">{idType}{idState ? ` — ${idState}` : ''}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Gender</p>
+                        <p className="text-sm font-medium">{gender || '—'}</p>
+                      </div>
+                      {address && (
+                        <div className="col-span-2">
+                          <p className="text-[10px] text-muted-foreground">Address</p>
+                          <p className="text-sm font-medium">{address}</p>
                         </div>
                       )}
-                      {height && (
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">Height</p>
-                          <p className="text-sm font-medium">{height}</p>
-                        </div>
-                      )}
-                    </>
-                  )}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* ── Guest 2 Details ── */}
+              {partySize === 2 && activeGuestTab === 2 && (
+                <div className="space-y-4">
+                  {/* Scan info banner */}
+                  {secondIdScanned && (
+                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                      <p className="text-xs text-green-700 dark:text-green-300">
+                        Guest 2 ID data auto-filled from scan. Please verify and add contact info.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="secondFirstName" className="mb-1.5 block">First Name *</Label>
+                      <Input id="secondFirstName" value={secondFirstName} onChange={(e) => setSecondFirstName(e.target.value)} placeholder="Jane" />
+                    </div>
+                    <div>
+                      <Label htmlFor="secondLastName" className="mb-1.5 block">Last Name *</Label>
+                      <Input id="secondLastName" value={secondLastName} onChange={(e) => setSecondLastName(e.target.value)} placeholder="Doe" />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <Label htmlFor="secondPhone" className="block">Phone *</Label>
+                      {phone && (
+                        <button
+                          type="button"
+                          onClick={() => setSecondPhone(phone)}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Same as Guest 1 ({phone})
+                        </button>
+                      )}
+                    </div>
+                    <Input id="secondPhone" value={secondPhone} onChange={(e) => setSecondPhone(e.target.value)} placeholder="(720) 555-0100" />
+                  </div>
+                  <div>
+                    <Label htmlFor="secondEmail" className="mb-1.5 block">Email</Label>
+                    <Input id="secondEmail" type="email" value={secondEmail} onChange={(e) => setSecondEmail(e.target.value)} placeholder="guest2@email.com" />
+                  </div>
+
+                  {/* Auto-filled ID info for Guest 2 */}
+                  <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Guest 2 — From ID Scan</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">ID Number</p>
+                        <p className="text-sm font-medium font-mono">{secondIdNumber || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Date of Birth</p>
+                        <p className="text-sm font-medium">{secondDateOfBirth || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">ID Type</p>
+                        <p className="text-sm font-medium">{secondIdType}{secondIdState ? ` — ${secondIdState}` : ''}</p>
+                      </div>
+                      {secondAddress && (
+                        <div className="col-span-2">
+                          <p className="text-[10px] text-muted-foreground">Address</p>
+                          <p className="text-sm font-medium">{secondAddress}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <Separator />
 
@@ -1336,7 +1913,12 @@ const STEPS = [
         {step === 4 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Terms & Signature</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Terms & Signature</CardTitle>
+                {partySize === 2 && (
+                  <Badge variant="outline" className="text-xs">Both Guests Must Sign</Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="bg-muted/30 rounded-lg p-4 text-xs text-muted-foreground space-y-2 max-h-48 overflow-y-auto">
@@ -1357,123 +1939,248 @@ const STEPS = [
                  </ol>
               </div>
 
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id="terms"
-                  checked={termsAccepted}
-                  onCheckedChange={(checked) => setTermsAccepted(checked === true)}
-                />
-                <Label htmlFor="terms" className="text-sm leading-relaxed cursor-pointer">
-                  I have read and agree to the terms and conditions above.
-                </Label>
-              </div>
-
-              {/* Signature pad */}
-              <div>
-                <div className="flex justify-between items-end mb-2">
-                  <Label className="text-xs font-medium">Guest Signature *</Label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      sigCanvas.current?.clear();
-                      setSignatureDataUrl('');
-                      setSignatureFromPhone(false);
-                    }}
-                    className="text-xs text-destructive font-medium hover:underline"
-                  >
-                    Clear
-                  </button>
-                </div>
-
-                {/* Sign with Phone toggle */}
-                <div className="flex gap-2 mb-3">
-                  <Button
-                    variant={!showPhoneSignature ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => {
-                      setShowPhoneSignature(false);
-                      setPhoneSigStatus('idle');
-                      setPhoneSigDataUrl('');
-                    }}
-                  >
-                    Sign Here
-                  </Button>
-                  <Button
-                    variant={showPhoneSignature ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => {
-                      setShowPhoneSignature(true);
-                      setPhoneSigStatus('generating');
-                      setPhoneSigDataUrl('');
-                    }}
-                  >
-                    Sign with Phone
-                  </Button>
-                </div>
-
-                {/* Phone Signature Panel */}
-                {showPhoneSignature && (
-                  <PhoneSignaturePanel
-                    onReceived={(sigUrl, terms) => {
-                      setSignatureDataUrl(sigUrl);
-                      setSignatureFromPhone(true);
-                      if (terms) setTermsAccepted(true);
-                      setPhoneSigStatus('received');
-                      toast.success('Signature received from phone');
-                    }}
+              {/* ── Guest 1 Signature ── */}
+              <div className="p-4 rounded-lg border border-border space-y-3 bg-card">
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="terms"
+                    checked={termsAccepted}
+                    onCheckedChange={(checked) => setTermsAccepted(checked === true)}
                   />
-                )}
+                  <Label htmlFor="terms" className="text-sm leading-relaxed cursor-pointer font-medium">
+                    {partySize === 2 ? `Guest 1 (${firstName || 'Primary'}): ` : ''}I have read and agree to the terms and conditions above.
+                  </Label>
+                </div>
 
-                {/* Local signature pad (shown when not using phone) */}
-                {!showPhoneSignature && (
-                  <>
-                    {signatureFromPhone && signatureDataUrl ? (
-                      <>
+                <div>
+                  <div className="flex justify-between items-end mb-2">
+                    <Label className="text-xs font-medium">
+                      {partySize === 2 ? `Guest 1 (${firstName || 'Primary'}) Signature *` : 'Guest Signature *'}
+                    </Label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sigCanvas.current?.clear();
+                        setSignatureDataUrl('');
+                        setSignatureFromPhone(false);
+                      }}
+                      className="text-xs text-destructive font-medium hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  {/* Sign with Phone toggle */}
+                  <div className="flex gap-2 mb-3">
+                    <Button
+                      variant={!showPhoneSignature ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        setShowPhoneSignature(false);
+                        setPhoneSigStatus('idle');
+                        setPhoneSigDataUrl('');
+                      }}
+                    >
+                      Sign Here
+                    </Button>
+                    <Button
+                      variant={showPhoneSignature ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        setShowPhoneSignature(true);
+                        setPhoneSigStatus('waiting');
+                        setPhoneSigDataUrl('');
+                      }}
+                    >
+                      Sign with Phone
+                    </Button>
+                  </div>
+
+                  {/* Phone Signature Panel */}
+                  {showPhoneSignature && (
+                    <PhoneSignaturePanel
+                      onReceived={(sigUrl, terms) => {
+                        setSignatureDataUrl(sigUrl);
+                        setSignatureFromPhone(true);
+                        if (terms) setTermsAccepted(true);
+                        setPhoneSigStatus('received');
+                        toast.success('Guest 1 signature received from phone');
+                      }}
+                    />
+                  )}
+
+                  {/* Local signature pad */}
+                  {!showPhoneSignature && (
+                    <>
+                      {signatureFromPhone && signatureDataUrl ? (
+                        <>
+                          <div
+                            className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden flex items-center justify-center"
+                            style={{
+                              backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
+                              backgroundSize: '100% 20px',
+                            }}
+                          >
+                            <img
+                              src={signatureDataUrl}
+                              alt="Guest signature from phone"
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                            <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                            <p className="text-[11px] text-green-700 dark:text-green-300">
+                              Signed on guest&apos;s phone. Tap <strong>Clear</strong> if you need to re-sign here.
+                            </p>
+                          </div>
+                        </>
+                      ) : (
                         <div
-                          className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden flex items-center justify-center"
+                          className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden"
                           style={{
                             backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
                             backgroundSize: '100% 20px',
                           }}
                         >
-                          <img
-                            src={signatureDataUrl}
-                            alt="Guest signature from phone"
-                            className="max-h-full max-w-full object-contain"
+                          <SignatureCanvas
+                            ref={sigCanvas}
+                            canvasProps={{ className: 'w-full h-full absolute inset-0 cursor-crosshair' }}
+                            penColor="#0f172a"
+                            onEnd={() => {
+                              if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
+                                setSignatureDataUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
+                              }
+                            }}
                           />
                         </div>
-                        <div className="flex items-center gap-2 mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                          <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
-                          <p className="text-[11px] text-green-700 dark:text-green-300">
-                            Signed on guest&apos;s phone. Tap <strong>Clear</strong> if you need to re-sign here.
-                          </p>
-                        </div>
-                      </>
-                    ) : (
-                      <div
-                        className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden"
-                        style={{
-                          backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
-                          backgroundSize: '100% 20px',
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Guest 2 Signature (partySize === 2) ── */}
+              {partySize === 2 && (
+                <div className="p-4 rounded-lg border border-border space-y-3 bg-card">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="termsGuest2"
+                      checked={termsAcceptedGuest2}
+                      onCheckedChange={(checked) => setTermsAcceptedGuest2(checked === true)}
+                    />
+                    <Label htmlFor="termsGuest2" className="text-sm leading-relaxed cursor-pointer font-medium">
+                      Guest 2 ({secondFirstName || 'Second Guest'}): I have read and agree to the terms and conditions above.
+                    </Label>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-end mb-2">
+                      <Label className="text-xs font-medium">
+                        Guest 2 ({secondFirstName || 'Second Guest'}) Signature *
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          secondSigCanvas.current?.clear();
+                          setSecondSignatureDataUrl('');
+                          setSecondSignatureFromPhone(false);
+                        }}
+                        className="text-xs text-destructive font-medium hover:underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+
+                    {/* Sign with Phone toggle for Guest 2 */}
+                    <div className="flex gap-2 mb-3">
+                      <Button
+                        variant={!showSecondPhoneSignature ? 'default' : 'outline'}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setShowSecondPhoneSignature(false);
+                          setSecondSignatureDataUrl('');
                         }}
                       >
-                        <SignatureCanvas
-                          ref={sigCanvas}
-                          canvasProps={{ className: 'w-full h-full absolute inset-0 cursor-crosshair' }}
-                          penColor="#0f172a"
-                          onEnd={() => {
-                            if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
-                              setSignatureDataUrl(sigCanvas.current.getCanvas().toDataURL('image/png'));
-                            }
-                          }}
-                        />
-                      </div>
+                        Sign Here
+                      </Button>
+                      <Button
+                        variant={showSecondPhoneSignature ? 'default' : 'outline'}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setShowSecondPhoneSignature(true);
+                          setSecondSignatureDataUrl('');
+                        }}
+                      >
+                        Sign with Phone
+                      </Button>
+                    </div>
+
+                    {/* Guest 2 Phone Signature Panel */}
+                    {showSecondPhoneSignature && (
+                      <PhoneSignaturePanel
+                        onReceived={(sigUrl, terms) => {
+                          setSecondSignatureDataUrl(sigUrl);
+                          setSecondSignatureFromPhone(true);
+                          if (terms) setTermsAcceptedGuest2(true);
+                          toast.success('Guest 2 signature received from phone');
+                        }}
+                      />
                     )}
-                  </>
-                )}
-              </div>
+
+                    {/* Guest 2 Local signature pad */}
+                    {!showSecondPhoneSignature && (
+                      <>
+                        {secondSignatureFromPhone && secondSignatureDataUrl ? (
+                          <>
+                            <div
+                              className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden flex items-center justify-center"
+                              style={{
+                                backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
+                                backgroundSize: '100% 20px',
+                              }}
+                            >
+                              <img
+                                src={secondSignatureDataUrl}
+                                alt="Guest 2 signature from phone"
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2 mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                              <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                              <p className="text-[11px] text-green-700 dark:text-green-300">
+                                Signed on Guest 2&apos;s phone. Tap <strong>Clear</strong> if you need to re-sign here.
+                              </p>
+                            </div>
+                          </>
+                        ) : (
+                          <div
+                            className="w-full h-36 border border-border rounded-lg bg-white dark:bg-zinc-100 relative overflow-hidden"
+                            style={{
+                              backgroundImage: 'repeating-linear-gradient(#e2e8f0 0px, #e2e8f0 1px, transparent 1px, transparent 20px)',
+                              backgroundSize: '100% 20px',
+                            }}
+                          >
+                            <SignatureCanvas
+                              ref={secondSigCanvas}
+                              canvasProps={{ className: 'w-full h-full absolute inset-0 cursor-crosshair' }}
+                              penColor="#0f172a"
+                              onEnd={() => {
+                                if (secondSigCanvas.current && !secondSigCanvas.current.isEmpty()) {
+                                  setSecondSignatureDataUrl(secondSigCanvas.current.getCanvas().toDataURL('image/png'));
+                                }
+                              }}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -1488,7 +2195,10 @@ const STEPS = [
               <h3 className="text-xl font-bold mb-2">Check-in Complete!</h3>
               <p className="text-muted-foreground mb-1">
                 Room <span className="font-semibold">{selectedRoom?.roomNumber}</span> has been assigned to{' '}
-                <span className="font-semibold">{firstName} {lastName}</span>.
+                <span className="font-semibold">{firstName} {lastName}</span>
+                {partySize === 2 && (
+                  <> & <span className="font-semibold">{secondFirstName} {secondLastName}</span> (2 Guests)</>
+                )}.
               </p>
               <p className="text-sm text-muted-foreground mb-6">
                 Stay ID: {completedStayId}
@@ -1499,6 +2209,12 @@ const STEPS = [
                   <span className="text-muted-foreground">Room</span>
                   <span className="font-medium">{selectedRoom?.roomNumber}</span>
                 </div>
+                {partySize === 2 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Guests</span>
+                    <span className="font-medium">2 Guests</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Check-in</span>
                   <span className="font-medium">{checkInDate}, {checkInTime}</span>
@@ -1514,10 +2230,20 @@ const STEPS = [
                  </div>
               </div>
 
-              {idPhotoUrl && (
-                <div className="mb-4 max-w-xs mx-auto">
-                  <p className="text-xs text-muted-foreground mb-1">ID Photo on File:</p>
-                  <img src={idPhotoUrl} alt="ID on file" className="w-full max-h-32 object-contain rounded border border-border bg-muted/20" />
+              {(idPhotoUrl || secondIdPhotoUrl) && (
+                <div className="flex gap-4 justify-center mb-6 max-w-sm mx-auto">
+                  {idPhotoUrl && (
+                    <div className="flex-1">
+                      <p className="text-xs text-muted-foreground mb-1">Guest 1 ID:</p>
+                      <img src={idPhotoUrl} alt="Guest 1 ID" className="w-full max-h-28 object-contain rounded border border-border bg-muted/20" />
+                    </div>
+                  )}
+                  {partySize === 2 && secondIdPhotoUrl && (
+                    <div className="flex-1">
+                      <p className="text-xs text-muted-foreground mb-1">Guest 2 ID:</p>
+                      <img src={secondIdPhotoUrl} alt="Guest 2 ID" className="w-full max-h-28 object-contain rounded border border-border bg-muted/20" />
+                    </div>
+                  )}
                 </div>
               )}
 

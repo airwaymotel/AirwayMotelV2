@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   // Fetch permissions and activity stats for each operator
   const operatorsWithStats: OperatorWithStats[] = await Promise.all(
     (operators || []).map(async (op) => {
-      const { data: perms } = await supabase
+      const { data: perms } = await supabase!
         .from('operator_permissions')
         .select('permission, enabled')
         .eq('user_id', op.id);
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
         .filter(p => p.enabled)
         .map(p => p.permission);
 
-      const { data: activity } = await supabase
+      const { data: activity } = await supabase!
         .from('operator_activity')
         .select('action, amount')
         .eq('operator_id', op.id);

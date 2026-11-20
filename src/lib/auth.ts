@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { supabase } from './supabase';
 import type { AuthUser, Permission, UserRole } from './auth-types';
 
-const SESSION_SECRET = process.env.SESSION_SECRET;
+const SESSION_SECRET = process.env.SESSION_SECRET || '';
 if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
   throw new Error('SESSION_SECRET environment variable is required (min 32 chars)');
 }

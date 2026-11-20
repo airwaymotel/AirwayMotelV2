@@ -10,6 +10,7 @@ import { Loader2 } from 'lucide-react';
 interface PrintData {
   stay: Stay;
   guest: Guest;
+  companionGuest?: Guest;
   room: Room;
   payments: Payment[];
 }
@@ -76,6 +77,7 @@ export default function InvoicePage() {
             const stay: Stay = {
               id: stayRow.id,
               guestId: stayRow.guest_id,
+              companionGuestIds: [],
               roomId: stayRow.room_id,
               checkInDate: stayRow.check_in_date,
               checkInTime: stayRow.check_in_time,
@@ -86,7 +88,35 @@ export default function InvoicePage() {
               createdAt: stayRow.created_at,
             };
 
-            setData({ stay, guest, room, payments: pmts });
+            let companionGuest: Guest | undefined;
+            try {
+              const { data: memberRows } = await supabase
+                .from('stay_guest_members')
+                .select('guest_id, is_primary')
+                .eq('stay_id', stayId);
+              if (memberRows && memberRows.length > 0) {
+                const compId = memberRows.find((m: any) => m.guest_id !== stayRow.guest_id)?.guest_id;
+                if (compId) {
+                  const { data: cg } = await supabase.from('guests').select('*').eq('id', compId).single();
+                  if (cg) {
+                    companionGuest = {
+                      id: cg.id as string,
+                      firstName: (cg.first_name as string) || '',
+                      lastName: (cg.last_name as string) || '',
+                      phone: (cg.phone as string) || '',
+                      email: (cg.email as string) || '',
+                      idNumber: (cg.id_number as string) || '',
+                      dateOfBirth: cg.date_of_birth ? String(cg.date_of_birth) : '',
+                      createdAt: cg.created_at as string,
+                    };
+                  }
+                }
+              }
+            } catch {
+              // Ignore if table not created yet
+            }
+
+            setData({ stay, guest, companionGuest, room, payments: pmts });
             return;
           }
         }
@@ -99,7 +129,11 @@ export default function InvoicePage() {
 
         if (!guest || !room) throw new Error('Missing guest or room data');
 
-        setData({ stay, guest, room, payments: stayPayments });
+        const companionGuest = stay.companionGuestIds && stay.companionGuestIds.length > 0
+          ? guests.find((g) => g.id === stay.companionGuestIds![0])
+          : undefined;
+
+        setData({ stay, guest, companionGuest, room, payments: stayPayments });
       } catch (err) {
         console.error(err);
         setError('Failed to load receipt details');
@@ -142,7 +176,7 @@ export default function InvoicePage() {
     );
   }
 
-  const { stay, guest, room, payments: stayPayments } = data;
+  const { stay, guest, companionGuest, room, payments: stayPayments } = data;
   const cashPayments = stayPayments.filter(p => p.method === 'cash');
   const totalCashPaid = cashPayments.reduce((sum, p) => sum + p.amount, 0);
   const cardPayments = stayPayments.filter(p => p.method === 'card');
@@ -183,6 +217,7 @@ export default function InvoicePage() {
           {/* Guest & Stay Info */}
           <div style={{ margin: '12px 0' }}>
             <div>Guest: {guest.firstName} {guest.lastName}</div>
+            {companionGuest && <div>Guest 2: {companionGuest.firstName} {companionGuest.lastName}</div>}
             <div>Room: #{room.roomNumber || 'N/A'}</div>
             <div>Check-In: {stay.checkInDate} {stay.checkInTime}</div>
             <div>Check-Out: {stay.checkOutDate} {stay.checkOutTime}</div>

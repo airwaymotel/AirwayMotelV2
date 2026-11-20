@@ -87,13 +87,37 @@ export default function GuestDetailsPage() {
             createdAt: guestRow.created_at as string,
           };
 
-          const { data: stayRows, error: stayError } = await supabase
+          const { data: rawStayRows, error: stayError } = await supabase
             .from('stays')
             .select('*, rooms(*), payments(*)')
             .eq('guest_id', guestId)
             .order('created_at', { ascending: false });
 
           if (stayError) throw stayError;
+          const stayRows = [...(rawStayRows || [])];
+
+          // Check if guest was a companion guest in other stays
+          try {
+            const { data: memberRows } = await supabase
+              .from('stay_guest_members')
+              .select('stay_id')
+              .eq('guest_id', guestId);
+            if (memberRows && memberRows.length > 0) {
+              const currentIds = new Set(stayRows.map((s: any) => s.id));
+              const companionStayIds = memberRows.map((m: any) => m.stay_id).filter((id: string) => !currentIds.has(id));
+              if (companionStayIds.length > 0) {
+                const { data: compStays } = await supabase
+                  .from('stays')
+                  .select('*, rooms(*), payments(*)')
+                  .in('id', companionStayIds);
+                if (compStays) {
+                  stayRows.push(...compStays);
+                }
+              }
+            }
+          } catch {
+            // stay_guest_members table might not exist yet
+          }
 
           const stayDetails: StayDetail[] = (stayRows || []).map((row) => {
             const r = row.rooms as Record<string, unknown>;
@@ -159,7 +183,7 @@ export default function GuestDetailsPage() {
             return;
           }
 
-          const guestStays = stays.filter((s) => s.guestId === guestId);
+          const guestStays = stays.filter((s) => s.guestId === guestId || s.companionGuestIds?.includes(guestId));
           const stayDetails: StayDetail[] = guestStays.map((stay) => {
             const room = rooms.find((r) => r.id === stay.roomId)!;
             const stayPayments = payments.filter((p) => p.stayId === stay.id);

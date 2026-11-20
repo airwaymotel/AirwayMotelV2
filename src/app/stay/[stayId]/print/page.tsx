@@ -49,9 +49,13 @@ async function generateRegistrationPdf(stayId: string) {
   if (!stay) throw new Error('Stay not found');
   const guest = useMotelStore.getState().guests.find(g => g.id === stay.guestId);
   if (!guest) throw new Error('Guest not found');
+  const companionGuestIds = stay.companionGuestIds || [];
+  const companionGuest = companionGuestIds.length > 0
+    ? useMotelStore.getState().guests.find(g => g.id === companionGuestIds[0])
+    : null;
   const room = useMotelStore.getState().rooms.find(r => r.id === stay.roomId);
   if (!room) throw new Error('Room not found');
-  const settings = useMotelStore.getState().settings || {};
+  const settings = useMotelStore.getState().motelSettings || {};
 
   // Fetch payments and signatures from Supabase
   let payments: { amount: number; method: string }[] = [];
@@ -316,7 +320,7 @@ async function generateRegistrationPdf(stayId: string) {
 
   y += 14;
 
-  // ── Signature Line 2 (blank) ──
+  // ── Signature Line 2 (Guest 2 if present, or blank) ──
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
 
@@ -325,9 +329,33 @@ async function generateRegistrationPdf(stayId: string) {
 
   doc.text('DATE', dateLineStart, y);
   doc.line(dateLineStart + 10, y, dateLineEnd, y);
+  if (companionGuest) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text(stay.checkInDate || '', dateLineStart + 11, y - 1);
+  }
 
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
   doc.text('PHONE #', phoneLineStart, y);
   doc.line(phoneLineStart + 15, y, phoneLineEnd, y);
+  if (companionGuest?.phone) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text(companionGuest.phone, phoneLineStart + 16, y - 1);
+  }
+
+  const secondSigUrl = companionGuest
+    ? signatures.find(s => s.guest_id === companionGuest.id)?.signature_data_url || (signatures[1]?.signature_data_url ?? null)
+    : null;
+
+  if (secondSigUrl) {
+    try {
+      doc.addImage(secondSigUrl, 'PNG', sigLineStart + 28, y - 7, 50, 7);
+    } catch {
+      // Image failed to load
+    }
+  }
 
   return { doc, guest };
 }

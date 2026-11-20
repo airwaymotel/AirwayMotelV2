@@ -74,6 +74,10 @@ export default function Guests() {
 
     return dedupedStays.map((stay) => {
       const guest = guests.find((g) => g.id === stay.guestId);
+      const companionGuests = (stay.companionGuestIds || [])
+        .map((id) => guests.find((g) => g.id === id))
+        .filter(Boolean) as Guest[];
+      const isTwoGuests = companionGuests.length > 0 || (stay.guestCount ?? 1) > 1;
       const room = rooms.find((r) => r.id === stay.roomId);
       const stayPayments = payments.filter((p) => p.stayId === stay.id);
       const totalPaid = stayPayments.reduce((sum, p) => sum + p.amount, 0);
@@ -88,9 +92,11 @@ export default function Guests() {
         name: guest ? `${guest.firstName} ${guest.lastName}` : 'Unknown',
         phone: guest?.phone || '',
         email: guest?.email || '',
+        companionGuests,
+        isTwoGuests,
         room: room?.roomNumber || '---',
         dates: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-        details: `${nights} Night${nights > 1 ? 's' : ''} • ${room?.type === '1-bed' ? '1-Bed King' : room?.type === '2-bed' ? '2-Bed Queen' : 'Standard'}`,
+        details: `${nights} Night${nights > 1 ? 's' : ''} • ${room?.type === '1-bed' ? '1-Bed King' : room?.type === '2-bed' ? '2-Bed Queen' : 'Standard'}${isTwoGuests ? ' • 2 Guests' : ' • 1 Guest'}`,
         roomType: room?.type || '',
         status: stay.status === 'checked_out' ? 'Completed' : stay.status === 'active' ? 'Active' : 'Cancelled',
         paid: `$${totalPaid.toFixed(2)}`,
@@ -105,12 +111,18 @@ export default function Guests() {
   const filteredData = useMemo(() => {
     return historyData.filter((guest) => {
       const receiptId = guest.stayId.substring(0, 8).toUpperCase();
+      const q = searchQuery.toLowerCase();
       const matchesSearch =
-        guest.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        guest.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        guest.phone.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        guest.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        receiptId.includes(searchQuery.toUpperCase());
+        guest.name.toLowerCase().includes(q) ||
+        guest.id.toLowerCase().includes(q) ||
+        guest.phone.toLowerCase().includes(q) ||
+        guest.email.toLowerCase().includes(q) ||
+        receiptId.includes(searchQuery.toUpperCase()) ||
+        guest.companionGuests.some((cg) =>
+          `${cg.firstName} ${cg.lastName}`.toLowerCase().includes(q) ||
+          cg.phone.toLowerCase().includes(q) ||
+          cg.idNumber.toLowerCase().includes(q)
+        );
       const matchesRoom = roomTypeFilter === 'All Types' || guest.roomType === roomTypeFilter;
       const matchesStatus = statusFilter === 'All' || guest.status === statusFilter;
       return matchesSearch && matchesRoom && matchesStatus;
@@ -371,8 +383,24 @@ export default function Guests() {
                           className="w-8 h-8"
                         />
                         <div>
-                          <p className="text-sm font-medium">{row.name}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-medium">{row.name}</p>
+                            {row.isTwoGuests && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] py-0 px-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border-blue-200 dark:border-blue-800 font-semibold"
+                              >
+                                2 Guests
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-[11px] text-muted-foreground font-mono">{row.id}</p>
+                          {row.companionGuests.map((comp) => (
+                            <p key={comp.id} className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <span className="text-muted-foreground/70 font-semibold">+</span> {comp.firstName} {comp.lastName}
+                              <span className="font-mono text-[10px] text-muted-foreground/80">({comp.idNumber || 'No ID'})</span>
+                            </p>
+                          ))}
                         </div>
                       </div>
                     </TableCell>
@@ -380,6 +408,11 @@ export default function Guests() {
                       <div>
                         <p className="text-sm">{row.email || '—'}</p>
                         <p className="text-[11px] text-muted-foreground">{row.phone || '—'}</p>
+                        {row.companionGuests.some((cg) => cg.phone) && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            + {row.companionGuests.map((cg) => cg.phone).filter(Boolean).join(', ')}
+                          </p>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-sm font-medium">#{row.room}</TableCell>

@@ -28,6 +28,8 @@ export interface Guest {
 export interface Stay {
   id: string;
   guestId: string;
+  companionGuestIds?: string[];
+  guestCount?: number;
   roomId: string;
   checkInDate: string;
   checkInTime: string;

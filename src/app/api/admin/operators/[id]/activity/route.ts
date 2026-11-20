@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       let room_number = '';
 
       if (act.guest_id) {
-        const { data: guest } = await supabase
+        const { data: guest } = await supabase!
           .from('guests')
           .select('first_name, last_name')
           .eq('id', act.guest_id)
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       }
 
       if (act.room_id) {
-        const { data: room } = await supabase
+        const { data: room } = await supabase!
           .from('rooms')
           .select('room_number')
           .eq('id', act.room_id)
