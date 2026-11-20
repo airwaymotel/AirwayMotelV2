@@ -374,7 +374,7 @@ export default function Guests() {
                   <TableRow
                     key={idx}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/guest/${row.guestId}`)}
+                    onClick={() => router.push(`/guest/${row.guestId}?stayId=${row.stayId}`)}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2.5">
